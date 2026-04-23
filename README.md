@@ -1,1 +1,1 @@
-# CabinetM-dical
+# CabinetMedical
