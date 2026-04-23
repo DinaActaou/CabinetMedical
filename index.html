@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical Cabinet</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <!-- ================= AUTH SCREENS (Hidden by default in demo) ================= -->
+  <section id="screen-login" class="auth-layout hidden">
+    <div class="auth-card">
+      <div class="logo-container" style="color:var(--primary); font-size:2rem; font-weight:bold; margin-bottom: 2rem;">
+        Medical Cabinet
+      </div>
+      <form id="form-login">
+        <div class="form-group"><input type="email" class="form-control" placeholder="Email" value="doctor@medical.com" required></div>
+        <div class="form-group mb-4"><input type="password" class="form-control" placeholder="Password" value="password" required></div>
+        <button type="submit" class="btn btn-primary w-full">Sign In</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= DASHBOARD LAYOUT ================= -->
+  <div id="dashboard-layout" class="dashboard-layout">
+    
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div style="background:var(--accent); width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:white;">
+          <i data-lucide="stethoscope" style="width:20px;height:20px;"></i>
+        </div>
+        <div style="color:white; font-size:1.125rem; font-weight:700; line-height:1.2;">
+          Medical <br> Cabinet
+        </div>
+      </div>
+      <div class="sidebar-nav">
+        <a href="#" data-target="screen-dashboard" class="nav-item active">
+          <i data-lucide="layout-grid" style="width: 18px; height: 18px;"></i> Dashboard
+        </a>
+        <a href="#" data-target="screen-appointments" class="nav-item">
+          <i data-lucide="calendar" style="width: 18px; height: 18px;"></i> Appointments
+        </a>
+        <a href="#" data-target="screen-services" class="nav-item">
+          <i data-lucide="stethoscope" style="width: 18px; height: 18px;"></i> Services
+        </a>
+        <a href="#" data-target="screen-users" class="nav-item">
+          <i data-lucide="users" style="width: 18px; height: 18px;"></i> Users
+        </a>
+        <a href="#" data-target="screen-settings" class="nav-item">
+          <i data-lucide="settings" style="width: 18px; height: 18px;"></i> Settings
+        </a>
+      </div>
+      
+      <div style="padding:1.5rem; text-align:center; font-size:0.75rem; color:#94A3B8;">
+        © 2026 Medical Cabinet
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      
+      <!-- Top Header -->
+      <header class="top-header">
+        <div class="search-wrapper">
+          <i data-lucide="search"></i>
+          <input type="text" placeholder="Search...">
+        </div>
+        
+        <div class="header-right">
+          <div class="lang-toggle">
+            <button class="active">EN</button>
+            <button>FR</button>
+          </div>
+          
+          <div class="notification-bell">
+            <i data-lucide="bell" style="width:20px;height:20px;"></i>
+            <div class="notification-badge"></div>
+          </div>
+          
+          <div class="user-profile">
+            <div class="avatar">JD</div>
+            <div class="user-name">Dr. John Doe</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Scrollable Page Content -->
+      <div class="page-content">
+        
+        <!-- Screen: Dashboard -->
+        <div id="screen-dashboard-content" class="dashboard-page">
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-subtitle">Welcome back! Here's your overview for today.</p>
+          
+          <!-- Stat Cards -->
+          <div class="stats-grid">
+            <div class="stat-card blue">
+              <div class="stat-icon-bg"><i data-lucide="calendar" style="width:20px;height:20px;"></i></div>
+              <div class="stat-chip">+12%</div>
+              <div class="stat-value">24</div>
+              <div class="stat-label">Total Appointments Today</div>
+            </div>
+            <div class="stat-card orange">
+              <div class="stat-icon-bg"><i data-lucide="clock" style="width:20px;height:20px;"></i></div>
+              <div class="stat-chip">+3</div>
+              <div class="stat-value">8</div>
+              <div class="stat-label">Pending</div>
+            </div>
+            <div class="stat-card green">
+              <div class="stat-icon-bg"><i data-lucide="check-circle-2" style="width:20px;height:20px;"></i></div>
+              <div class="stat-chip">+5</div>
+              <div class="stat-value">12</div>
+              <div class="stat-label">Confirmed</div>
+            </div>
+            <div class="stat-card red">
+              <div class="stat-icon-bg"><i data-lucide="x-circle" style="width:20px;height:20px;"></i></div>
+              <div class="stat-chip">-2</div>
+              <div class="stat-value">4</div>
+              <div class="stat-label">Cancelled</div>
+            </div>
+          </div>
+
+          <!-- Summaries -->
+          <div class="summary-grid">
+            <div class="summary-card">
+              <div class="summary-icon"><i data-lucide="users" style="width:24px;height:24px;"></i></div>
+              <div>
+                <div class="summary-value">156</div>
+                <div class="summary-label">Total Patients</div>
+              </div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon"><i data-lucide="activity" style="width:24px;height:24px;"></i></div>
+              <div>
+                <div class="summary-value">8</div>
+                <div class="summary-label">Active Doctors</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Today's List -->
+          <div class="list-card">
+            <div class="list-header">
+              <div style="background:#F0F9FF; color:var(--accent); width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center;">
+                <i data-lucide="calendar" style="width:16px;height:16px;"></i>
+              </div>
+              Today's Appointments
+            </div>
+            <div id="dashboard-today-list">
+              <!-- Injected via JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen: Appointments -->
+        <div id="screen-appointments-content" class="dashboard-page hidden">
+          <div class="d-flex justify-between align-center mb-6">
+            <div>
+              <h1 class="page-title">Appointments</h1>
+              <p class="page-subtitle mb-0">Manage all medical appointments</p>
+            </div>
+            <button class="btn btn-primary" data-modal="modal-appointment">
+              <i data-lucide="plus" style="width:16px;height:16px"></i> Add Appointment
+            </button>
+          </div>
+          
+          <div class="page-table-wrapper">
+            <div class="table-toolbar">
+              <div class="search-wrapper" style="width: 400px; max-width:100%;">
+                <i data-lucide="search"></i>
+                <input type="text" placeholder="Search..." style="background:white; border:1px solid var(--border-color)">
+              </div>
+            </div>
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Patient Name</th>
+                    <th>Doctor</th>
+                    <th>Service</th>
+                    <th>Date & Time</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-appointments">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen: Services -->
+        <div id="screen-services-content" class="dashboard-page hidden">
+          <h1 class="page-title">Our Services</h1>
+          <p class="page-subtitle">Comprehensive medical services for your health needs</p>
+          
+          <div class="grid-view" id="services-grid">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- Screen: Users -->
+        <div id="screen-users-content" class="dashboard-page hidden">
+          <h1 class="page-title">Users</h1>
+          <p class="page-subtitle">Manage medical staff and administrators</p>
+          
+          <div class="grid-view" id="users-grid">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- Screen: Settings -->
+        <div id="screen-settings-content" class="dashboard-page hidden">
+          <h1 class="page-title">Settings</h1>
+          <p class="page-subtitle">Manage your account and application preferences</p>
+          
+          <div class="settings-grid">
+            <div class="settings-panel">
+              <div class="settings-title">Account Settings</div>
+              <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-control" value="Dr. John Doe">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="text" class="form-control" value="john.doe@medical.com">
+              </div>
+              <div class="form-group mb-4">
+                <label class="form-label">Phone Number</label>
+                <input type="text" class="form-control" value="+33 1 23 45 67 89">
+              </div>
+              <button class="btn" style="background:var(--text-main); color:white;">Save Changes</button>
+            </div>
+
+            <div class="settings-panel">
+              <div class="settings-title">Notifications</div>
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <strong>Email Notifications</strong>
+                  <span>Receive email updates for new appointments</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <strong>SMS Notifications</strong>
+                  <span>Get SMS alerts for urgent updates</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="toggle-row mb-0">
+                <div class="toggle-info">
+                  <strong>Desktop Notifications</strong>
+                  <span>Show browser notifications</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-panel">
+              <div class="settings-title">Working Hours</div>
+              <div class="d-flex gap-4 mb-4">
+                <div style="flex:1">
+                  <label class="form-label">Start Time</label>
+                  <div style="position:relative">
+                    <input type="time" class="form-control" value="09:00">
+                    <i data-lucide="clock" style="position:absolute; right:12px; top:10px; width:16px; color:#94A3B8;"></i>
+                  </div>
+                </div>
+                <div style="flex:1">
+                  <label class="form-label">End Time</label>
+                  <div style="position:relative">
+                    <input type="time" class="form-control" value="18:00">
+                    <i data-lucide="clock" style="position:absolute; right:12px; top:10px; width:16px; color:#94A3B8;"></i>
+                  </div>
+                </div>
+              </div>
+              <label class="form-label">Working Days</label>
+              <div class="days-row">
+                <button class="day-btn active">Mon</button>
+                <button class="day-btn active">Tue</button>
+                <button class="day-btn active">Wed</button>
+                <button class="day-btn active">Thu</button>
+                <button class="day-btn active">Fri</button>
+                <button class="day-btn">Sat</button>
+                <button class="day-btn">Sun</button>
+              </div>
+            </div>
+
+            <div class="settings-panel">
+              <div class="settings-title">Security</div>
+              <div class="form-group">
+                <label class="form-label">Current Password</label>
+                <input type="password" class="form-control">
+              </div>
+              <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input type="password" class="form-control">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Confirm New Password</label>
+                <input type="password" class="form-control">
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ================= MODALS & TOASTS ================= -->
+  <div class="modal-overlay" id="modal-appointment">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">New Appointment</div>
+        <i data-lucide="x" class="modal-close"></i>
+      </div>
+      <form onsubmit="saveAppointment(event)">
+        <div class="modal-body">
+          <div class="form-group mb-4">
+            <label class="form-label">Patient</label>
+            <input type="text" class="form-control" placeholder="Search patient..." required>
+          </div>
+          <div class="d-flex gap-4 mb-4">
+            <div class="form-group" style="flex:1">
+              <label class="form-label">Doctor</label>
+              <select class="form-control" required><option>Dr. Jean Martin</option><option>Dr. Sophie Bernard</option></select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label class="form-label">Service</label>
+              <select class="form-control" required><option>Cardiology</option><option>General Checkup</option></select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Confirm</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+  <script src="app.js"></script>
+</body>
+</html>
