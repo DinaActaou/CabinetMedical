@@ -4,6 +4,7 @@ const API_BASE_URL = '/api';
 // === STATE ===
 let currentUser = null;
 let token = localStorage.getItem('auth_token');
+let currentLang = document.documentElement.lang || 'en';
 
 // === UTILS ===
 function getHeaders() {
@@ -34,6 +35,12 @@ async function apiFetch(endpoint, options = {}) {
     }
 
     return response.json();
+}
+
+// === I18N LOGIC ===
+function t(key) {
+    if (!window.translations || !window.translations[currentLang]) return key;
+    return window.translations[currentLang][key] || key;
 }
 
 // === APP LOGIC ===
@@ -190,7 +197,7 @@ async function handleLogin(e) {
             currentUser = data.user;
             showDashboard();
             loadInitialData();
-            showToast('Login successful!');
+            showToast(t('login_success'));
         }
     } catch (err) {
         alert('Login failed: ' + err.message);
@@ -206,7 +213,7 @@ async function handleRegister(e) {
     const password_confirmation = document.getElementById('reg-password-confirm').value;
 
     if (password !== password_confirmation) {
-        alert('Passwords do not match');
+        alert(t('pass_mismatch'));
         return;
     }
 
@@ -222,7 +229,7 @@ async function handleRegister(e) {
             currentUser = data.user;
             showDashboard();
             loadInitialData();
-            showToast('Registration successful!');
+            showToast(t('reg_success'));
         }
     } catch (err) {
         alert('Registration failed: ' + err.message);
@@ -269,11 +276,13 @@ function renderTodayList(appointments) {
     if (!container) return;
 
     if (!appointments || appointments.length === 0) {
-        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-body);">No appointments for today.</div>';
+        container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-body);">${t('no_appointments')}</div>`;
         return;
     }
 
-    container.innerHTML = appointments.map(app => `
+    container.innerHTML = appointments.map(app => {
+        const statusKey = app.status; // Using raw value for translation key
+        return `
         <div class="list-item">
             <div class="list-item-left">
                 <div class="list-patient-avatar"><i data-lucide="user" style="width:20px;height:20px;"></i></div>
@@ -287,12 +296,12 @@ function renderTodayList(appointments) {
                     <div style="font-weight:500; font-size:0.875rem; color:var(--text-main);"><i data-lucide="stethoscope" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:0.25rem;"></i>${app.doctor.name}</div>
                     <div style="font-size:0.75rem; color:var(--text-body);"><i data-lucide="clock" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:0.25rem;"></i>${app.appointment_time}</div>
                 </div>
-                <span class="badge badge-${app.status.toLowerCase() === 'confirmed' ? 'success' : (app.status.toLowerCase() === 'pending' ? 'warning' : 'danger')}">
-                    ${app.status}
+                <span class="badge badge-${statusKey.toLowerCase() === 'confirmed' ? 'success' : (statusKey.toLowerCase() === 'pending' ? 'warning' : 'danger')}">
+                    ${t(statusKey)}
                 </span>
             </div>
         </div>
-    `).join('');
+    `}).join('');
     lucide.createIcons();
 }
 
@@ -302,19 +311,21 @@ async function loadAppointments() {
         const tbody = document.getElementById('tbody-appointments');
         if (!tbody) return;
 
-        tbody.innerHTML = appointments.map(app => `
+        tbody.innerHTML = appointments.map(app => {
+            const statusKey = app.status;
+            return `
             <tr>
                 <td style="font-weight:500; color:var(--text-main);">${app.patient.name}</td>
                 <td>${app.doctor.name}</td>
                 <td>${app.service.name}</td>
                 <td>${app.appointment_date} at ${app.appointment_time}</td>
-                <td><span class="badge badge-${app.status.toLowerCase() === 'confirmed' ? 'success' : (app.status.toLowerCase() === 'pending' ? 'warning' : 'danger')}">${app.status}</span></td>
+                <td><span class="badge badge-${statusKey.toLowerCase() === 'confirmed' ? 'success' : (statusKey.toLowerCase() === 'pending' ? 'warning' : 'danger')}">${t(statusKey)}</span></td>
                 <td class="text-right">
                     <button class="btn-icon" onclick="editAppointment(${app.id})"><i data-lucide="pencil" style="width:16px;height:16px"></i></button>
                     <button class="btn-icon delete" onclick="deleteAppointment(${app.id})"><i data-lucide="trash-2" style="width:16px;height:16px;color:#EF4444"></i></button>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
         lucide.createIcons();
     } catch (err) {
         console.error('Error loading appointments:', err);
@@ -375,9 +386,9 @@ async function prepareAppointmentModal() {
         const doctorSelect = document.getElementById('select-doctor');
         const serviceSelect = document.getElementById('select-service');
 
-        patientSelect.innerHTML = '<option value="">Select a patient...</option>' + patients.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-        doctorSelect.innerHTML = '<option value="">Select a doctor...</option>' + doctors.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-        serviceSelect.innerHTML = '<option value="">Select a service...</option>' + services.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        patientSelect.innerHTML = `<option value="">${t('Select a patient...')}</option>` + patients.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        doctorSelect.innerHTML = `<option value="">${t('Select a doctor...')}</option>` + doctors.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+        serviceSelect.innerHTML = `<option value="">${t('Select a service...')}</option>` + services.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
     } catch (err) {
         console.error('Error preparing modal:', err);
     }
@@ -400,7 +411,7 @@ async function handleSaveAppointment(e) {
             body: JSON.stringify(payload)
         });
         document.getElementById('modal-appointment').classList.remove('active');
-        showToast('Appointment scheduled successfully!');
+        showToast(t('apt_saved'));
         if (!document.getElementById('screen-appointments-content').classList.contains('hidden')) {
             loadAppointments();
         } else {
@@ -412,10 +423,10 @@ async function handleSaveAppointment(e) {
 }
 
 async function deleteAppointment(id) {
-    if (!confirm('Are you sure you want to delete this appointment?')) return;
+    if (!confirm(t('confirm_delete'))) return;
     try {
         await apiFetch(`/appointments/${id}`, { method: 'DELETE' });
-        showToast('Appointment deleted.');
+        showToast(t('apt_deleted'));
         loadAppointments();
     } catch (err) {
         alert('Error deleting appointment: ' + err.message);
