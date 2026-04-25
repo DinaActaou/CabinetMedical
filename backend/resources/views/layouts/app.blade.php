@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>@yield('title', 'Medical Cabinet')</title>
   <link rel="stylesheet" href="{{ asset('css/styles.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   @stack('styles')
 </head>

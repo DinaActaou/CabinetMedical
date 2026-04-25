@@ -4,37 +4,38 @@ const API_BASE_URL = '/api';
 // === STATE ===
 let currentUser = null;
 let token = localStorage.getItem('auth_token');
-let currentLang = document.documentElement.lang || 'en';
+let currentLang = (document.documentElement.lang || 'en').substring(0, 2);
 
-// === UTILS ===
-function getHeaders() {
-    return {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-    };
+// === AXIOS CONFIG ===
+axios.defaults.baseURL = API_BASE_URL;
+axios.defaults.headers.common['Accept'] = 'application/json';
+if (token) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 }
 
-async function apiFetch(endpoint, options = {}) {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers: {
-            ...getHeaders(),
-            ...(options.headers || {})
+// Intercept 401s to logout
+axios.interceptors.response.use(
+    response => response,
+    error => {
+        if (error.response && error.response.status === 401) {
+            if (!error.config.url.includes('/logout')) {
+                logout();
+            }
         }
-    });
-
-    if (response.status === 401) {
-        logout();
-        return null;
+        return Promise.reject(error);
     }
+);
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'API Error');
-    }
+async function apiFetch(endpoint, options = {}) {
+    const config = {
+        url: endpoint,
+        method: options.method || 'GET',
+        data: options.body ? JSON.parse(options.body) : null,
+        params: options.params || null
+    };
 
-    return response.json();
+    const response = await axios(config);
+    return response.data;
 }
 
 // === I18N LOGIC ===
@@ -43,18 +44,31 @@ function t(key) {
     return window.translations[currentLang][key] || key;
 }
 
+// === UTILS ===
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
 // === APP LOGIC ===
 document.addEventListener('DOMContentLoaded', () => {
     init();
 });
 
 async function init() {
-    lucide.createIcons();
-    
-    if (!token) {
-        showLogin();
-    } else {
-        try {
+    try {
+        lucide.createIcons();
+        
+        if (!token) {
+            showLogin();
+        } else {
             currentUser = await apiFetch('/user');
             if (currentUser) {
                 showDashboard();
@@ -62,13 +76,13 @@ async function init() {
             } else {
                 showLogin();
             }
-        } catch (err) {
-            console.error('Auth error:', err);
-            showLogin();
         }
+    } catch (err) {
+        console.error('Initialization error:', err);
+        showLogin();
+    } finally {
+        setupEventListeners();
     }
-
-    setupEventListeners();
 }
 
 function setupEventListeners() {
@@ -78,22 +92,24 @@ function setupEventListeners() {
             if (link.id === 'btn-logout') return;
             e.preventDefault();
             
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            link.classList.add('active');
-            
             const target = link.getAttribute('data-target');
             if (target) {
-                document.querySelectorAll('.dashboard-page').forEach(page => page.classList.add('hidden'));
-                document.getElementById(`${target}-content`)?.classList.remove('hidden');
-                
-                // Refresh data if needed
-                if (target === 'screen-dashboard') loadDashboardStats();
-                if (target === 'screen-appointments') loadAppointments();
-                if (target === 'screen-services') loadServices();
-                if (target === 'screen-users') loadUsers();
+                switchScreen(target);
             }
         });
     });
+
+    // Real-time Search for Appointments
+    const searchInput = document.getElementById('search-appointments');
+    if (searchInput) {
+        const debouncedSearch = debounce((query) => {
+            loadAppointments(query);
+        }, 300);
+
+        searchInput.addEventListener('input', (e) => {
+            debouncedSearch(e.target.value);
+        });
+    }
 
     // Login Form
     const loginForm = document.getElementById('form-login');
@@ -132,16 +148,21 @@ function setupEventListeners() {
             const modalId = btn.getAttribute('data-modal');
             const modal = document.getElementById(modalId);
             if (modal) {
+                if (modalId === 'modal-appointment') {
+                    resetAppointmentModal();
+                    prepareAppointmentModal();
+                }
                 modal.classList.add('active');
-                if (modalId === 'modal-appointment') prepareAppointmentModal();
             }
         });
     });
 
-    document.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
-        btn.addEventListener('click', () => {
-            btn.closest('.modal-overlay').classList.remove('active');
-        });
+    // Use event delegation for modal closing
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.modal-close') || e.target.closest('.modal-cancel')) {
+            const modal = e.target.closest('.modal-overlay');
+            if (modal) modal.classList.remove('active');
+        }
     });
 
     // Appointment Form
@@ -150,10 +171,46 @@ function setupEventListeners() {
         appointmentForm.addEventListener('submit', handleSaveAppointment);
     }
 
+    // Notifications Toggle
+    const notifTrigger = document.getElementById('notification-trigger');
+    const notifPanel = document.getElementById('notifications-panel');
+    if (notifTrigger && notifPanel) {
+        notifTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            notifPanel.classList.toggle('active');
+        });
+
+        // Close when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!notifPanel.contains(e.target) && !notifTrigger.contains(e.target)) {
+                notifPanel.classList.remove('active');
+            }
+        });
+    }
+
     // Day buttons toggle
     document.querySelectorAll('.day-btn').forEach(btn => {
         btn.addEventListener('click', () => btn.classList.toggle('active'));
     });
+}
+
+function switchScreen(target) {
+    document.querySelectorAll('.nav-item').forEach(n => {
+        n.classList.toggle('active', n.getAttribute('data-target') === target);
+    });
+    
+    document.querySelectorAll('.dashboard-page').forEach(page => page.classList.add('hidden'));
+    const targetEl = document.getElementById(`${target}-content`);
+    if (targetEl) {
+        targetEl.classList.remove('hidden');
+        localStorage.setItem('active_screen', target);
+        
+        // Refresh data if needed
+        if (target === 'screen-dashboard') loadDashboardStats();
+        if (target === 'screen-appointments') loadAppointments();
+        if (target === 'screen-services') loadServices();
+        if (target === 'screen-users') loadUsers();
+    }
 }
 
 function showLogin() {
@@ -166,6 +223,9 @@ function showDashboard() {
     document.getElementById('screen-login').classList.add('hidden');
     document.getElementById('screen-register').classList.add('hidden');
     document.getElementById('dashboard-layout').classList.remove('hidden');
+    
+    const lastScreen = localStorage.getItem('active_screen') || 'screen-dashboard';
+    switchScreen(lastScreen);
     
     // Update user profile
     if (currentUser) {
@@ -194,13 +254,14 @@ async function handleLogin(e) {
         if (data && data.access_token) {
             token = data.access_token;
             localStorage.setItem('auth_token', token);
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             currentUser = data.user;
             showDashboard();
             loadInitialData();
             showToast(t('login_success'));
         }
     } catch (err) {
-        alert('Login failed: ' + err.message);
+        alert('Login failed: ' + (err.response?.data?.message || err.message));
     }
 }
 
@@ -226,13 +287,14 @@ async function handleRegister(e) {
         if (data && data.access_token) {
             token = data.access_token;
             localStorage.setItem('auth_token', token);
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             currentUser = data.user;
             showDashboard();
             loadInitialData();
             showToast(t('reg_success'));
         }
     } catch (err) {
-        alert('Registration failed: ' + err.message);
+        alert('Registration failed: ' + (err.response?.data?.message || err.message));
     }
 }
 
@@ -245,6 +307,7 @@ async function logout() {
         token = null;
         currentUser = null;
         localStorage.removeItem('auth_token');
+        delete axios.defaults.headers.common['Authorization'];
         showLogin();
     }
 }
@@ -281,7 +344,7 @@ function renderTodayList(appointments) {
     }
 
     container.innerHTML = appointments.map(app => {
-        const statusKey = app.status; // Using raw value for translation key
+        const statusKey = app.status; 
         return `
         <div class="list-item">
             <div class="list-item-left">
@@ -305,9 +368,11 @@ function renderTodayList(appointments) {
     lucide.createIcons();
 }
 
-async function loadAppointments() {
+async function loadAppointments(searchQuery = '') {
     try {
-        const appointments = await apiFetch('/appointments');
+        const appointments = await apiFetch('/appointments', {
+            params: searchQuery ? { search: searchQuery } : null
+        });
         const tbody = document.getElementById('tbody-appointments');
         if (!tbody) return;
 
@@ -376,6 +441,12 @@ async function loadUsers() {
     }
 }
 
+function resetAppointmentModal() {
+    document.getElementById('appointment-id').value = '';
+    document.getElementById('form-appointment').reset();
+    document.getElementById('appointment-status').value = 'Pending';
+}
+
 async function prepareAppointmentModal() {
     try {
         const patients = await apiFetch('/users/patients');
@@ -386,39 +457,77 @@ async function prepareAppointmentModal() {
         const doctorSelect = document.getElementById('select-doctor');
         const serviceSelect = document.getElementById('select-service');
 
+        const currentPatient = patientSelect.value;
+        const currentDoctor = doctorSelect.value;
+        const currentService = serviceSelect.value;
+
         patientSelect.innerHTML = `<option value="">${t('Select a patient...')}</option>` + patients.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         doctorSelect.innerHTML = `<option value="">${t('Select a doctor...')}</option>` + doctors.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
         serviceSelect.innerHTML = `<option value="">${t('Select a service...')}</option>` + services.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+        if (currentPatient) patientSelect.value = currentPatient;
+        if (currentDoctor) doctorSelect.value = currentDoctor;
+        if (currentService) serviceSelect.value = currentService;
+
     } catch (err) {
         console.error('Error preparing modal:', err);
     }
 }
 
+async function editAppointment(id) {
+    try {
+        const app = await apiFetch(`/appointments/${id}`);
+        if (!app) return;
+
+        document.getElementById('appointment-id').value = app.id;
+        
+        // Prepare options first so we can select them
+        await prepareAppointmentModal();
+
+        document.getElementById('select-patient').value = app.patient_id;
+        document.getElementById('select-doctor').value = app.doctor_id;
+        document.getElementById('select-service').value = app.service_id;
+        document.getElementById('appointment-date').value = app.appointment_date;
+        document.getElementById('appointment-time').value = app.appointment_time;
+        document.getElementById('appointment-status').value = app.status;
+
+        document.getElementById('modal-appointment').classList.add('active');
+    } catch (err) {
+        console.error('Error loading appointment for edit:', err);
+    }
+}
+
 async function handleSaveAppointment(e) {
     e.preventDefault();
+    const id = document.getElementById('appointment-id').value;
     const payload = {
         patient_id: document.getElementById('select-patient').value,
         doctor_id: document.getElementById('select-doctor').value,
         service_id: document.getElementById('select-service').value,
         appointment_date: document.getElementById('appointment-date').value,
         appointment_time: document.getElementById('appointment-time').value,
-        status: 'Pending'
+        status: document.getElementById('appointment-status').value
     };
 
+    const method = id ? 'PUT' : 'POST';
+    const endpoint = id ? `/appointments/${id}` : '/appointments';
+
     try {
-        await apiFetch('/appointments', {
-            method: 'POST',
+        await apiFetch(endpoint, {
+            method: method,
             body: JSON.stringify(payload)
         });
         document.getElementById('modal-appointment').classList.remove('active');
         showToast(t('apt_saved'));
+        
+        // Refresh visible data
         if (!document.getElementById('screen-appointments-content').classList.contains('hidden')) {
             loadAppointments();
-        } else {
-            loadDashboardStats();
-        }
+        } 
+        loadDashboardStats();
+        
     } catch (err) {
-        alert('Error saving appointment: ' + err.message);
+        alert('Error saving appointment: ' + (err.response?.data?.message || err.message));
     }
 }
 
@@ -428,13 +537,15 @@ async function deleteAppointment(id) {
         await apiFetch(`/appointments/${id}`, { method: 'DELETE' });
         showToast(t('apt_deleted'));
         loadAppointments();
+        loadDashboardStats();
     } catch (err) {
-        alert('Error deleting appointment: ' + err.message);
+        alert('Error deleting appointment: ' + (err.response?.data?.message || err.message));
     }
 }
 
 function showToast(message) {
     const container = document.getElementById('toast-container');
+    if (!container) return;
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.innerHTML = `

@@ -11,8 +11,8 @@
       </div>
       <h2 style="margin-bottom: 1.5rem; color: var(--primary);">{{ __('Login') }}</h2>
       <form id="form-login">
-        <div class="form-group"><input type="email" id="login-email" class="form-control" placeholder="{{ __('Email') }}" required></div>
-        <div class="form-group mb-4"><input type="password" id="login-password" class="form-control" placeholder="{{ __('Password') }}" required></div>
+        <div class="form-group"><input type="email" id="login-email" class="form-control" placeholder="{{ __('Email') }}" value="doctor@medibook.com" required></div>
+        <div class="form-group mb-4"><input type="password" id="login-password" class="form-control" placeholder="{{ __('Password') }}" value="password" required></div>
         <button type="submit" class="btn btn-primary w-full">{{ __('Sign In') }}</button>
       </form>
       <p style="margin-top: 1.5rem; font-size: 0.875rem;">
@@ -140,7 +140,7 @@
             <div class="table-toolbar">
               <div class="search-wrapper" style="width: 400px; max-width:100%;">
                 <i data-lucide="search"></i>
-                <input type="text" placeholder="{{ __('Search...') }}" style="background:white; border:1px solid var(--border-color)">
+                <input type="text" id="search-appointments" placeholder="{{ __('Search...') }}" style="background:white; border:1px solid var(--border-color)">
               </div>
             </div>
             <div style="overflow-x:auto;">
@@ -300,7 +300,16 @@
         <i data-lucide="x" class="modal-close"></i>
       </div>
       <form id="form-appointment">
+        <input type="hidden" id="appointment-id">
         <div class="modal-body">
+          <div class="form-group mb-4">
+            <label class="form-label">{{ __('Status') }}</label>
+            <select id="appointment-status" class="form-control">
+                <option value="Pending">{{ __('Pending') }}</option>
+                <option value="Confirmed">{{ __('Confirmed') }}</option>
+                <option value="Cancelled">{{ __('Cancelled') }}</option>
+            </select>
+          </div>
           <div class="form-group mb-4">
             <label class="form-label">{{ __('Patient') }}</label>
             <select id="select-patient" class="form-control" required>

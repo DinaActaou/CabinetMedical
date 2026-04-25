@@ -143,18 +143,85 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 
 .top-header { height: 72px; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: white;}
 .search-wrapper { position: relative; width: 300px; }
-.search-wrapper i { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-body); width: 16px; height: 16px; }
+.search-wrapper i, .search-wrapper svg { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-body); width: 16px; height: 16px; }
 .search-wrapper input { width: 100%; padding: 0.5rem 1rem 0.5rem 2.5rem; border: none; background-color: #F1F5F9; border-radius: 9999px; font-size: 0.875rem; outline: none; }
 
 .header-right { display: flex; align-items: center; gap: 1.5rem; }
 
 /* Language Pill */
 .lang-toggle { display: flex; background: var(--primary); padding: 0.25rem; border-radius: 9999px; }
-.lang-toggle button { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; color: #CBD5E1; font-weight: 600; }
-.lang-toggle button.active { background: var(--primary-dark); color: white; }
+.lang-toggle button, .lang-toggle a { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; color: #CBD5E1; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
+.lang-toggle button.active, .lang-toggle a.active { background: var(--primary-dark); color: white; }
+.lang-toggle a:hover { color: white; }
 
 .notification-bell { position: relative; color: var(--primary); cursor: pointer; }
-.notification-badge { position: absolute; top: -2px; right: -2px; background-color: var(--accent); width: 8px; height: 8px; border-radius: 50%; }
+.notification-badge { position: absolute; top: -2px; right: -2px; background-color: var(--accent); width: 8px; height: 8px; border-radius: 50%; border: 2px solid white; }
+
+/* Notifications Dropdown */
+.notifications-dropdown {
+  position: absolute;
+  top: calc(100% + 15px);
+  right: -10px;
+  width: 320px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-color);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+}
+.notifications-dropdown.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.notifications-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  color: var(--primary);
+  font-size: 0.875rem;
+}
+.mark-read { font-size: 0.75rem; color: var(--accent); cursor: pointer; font-weight: 500; }
+.notifications-list { max-height: 300px; overflow-y: auto; }
+.notification-item {
+  padding: 1rem;
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid #F1F5F9;
+  transition: background 0.2s;
+}
+.notification-item:hover { background-color: #F8FAFC; }
+.notification-item.unread { background-color: #F0F9FF; }
+.notif-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.notif-icon.appointment { background: #E0F2FE; color: #0369A1; }
+.notif-icon.system { background: #F1F5F9; color: #475569; }
+.notif-icon svg { width: 18px; height: 18px; }
+.notif-content p { font-size: 0.8125rem; color: var(--text-main); line-height: 1.4; margin-bottom: 0.25rem; }
+.notif-content span { font-size: 0.75rem; color: var(--text-body); }
+.notifications-footer {
+  padding: 0.75rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 500;
+  border-top: 1px solid var(--border-color);
+  cursor: pointer;
+}
 
 .user-profile { display: flex; align-items: center; gap: 0.75rem; }
 .avatar { width: 32px; height: 32px; border-radius: 50%; background-color: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem; }
