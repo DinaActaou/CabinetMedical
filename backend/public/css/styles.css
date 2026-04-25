@@ -13,7 +13,8 @@
   --info: #3B82F6;
   
   --text-main: #1E3A5F;
-  --text-body: #64748B;
+  --text-body: #475569;
+  --text-muted: #64748B;
   
   --border-radius-card: 16px;
   --border-radius-element: 8px;
@@ -89,6 +90,52 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 .auth-layout { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
 .auth-card { background-color: var(--card-bg); border-radius: var(--border-radius-card); box-shadow: var(--shadow-md); padding: 2.5rem; width: 100%; max-width: 440px; text-align: center; }
 
+/* Portal Selection Cards */
+.portal-card {
+  background: white;
+  padding: 3rem 2rem;
+  border-radius: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  border: 1px solid #F1F5F9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+.portal-card:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--shadow-xl);
+}
+.portal-icon-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+.portal-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+.portal-description {
+  color: var(--text-body);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 2.5rem;
+  max-width: 280px;
+}
+.portal-btn {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
 /* Dashboard Layout */
 .dashboard-layout { display: flex; height: 100vh; overflow: hidden; }
 
@@ -137,9 +184,52 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
   color: white;
 }
 
-/* Top Header */
-.main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #FFFFFF; } /* main background is white in screenshots, cards have borders? No, bg is very light gray #FAFAFA, cards are white */
+/* Main Content */
+.main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; transition: all 0.3s ease; }
 .main-content { background-color: #FAFCFF; }
+
+/* Patient Mode Adjustments */
+body.is-patient .sidebar { display: none; }
+body.is-patient .main-content { border-left: none; }
+body.is-patient .patient-nav { display: flex !important; }
+
+/* Doctor & Admin Visibility Helpers */
+.doctor-only, .admin-only { display: none !important; }
+body.is-doctor .doctor-only { display: block !important; }
+body:not(.is-patient):not(.is-doctor) .admin-only { display: block !important; }
+
+/* In case of flex containers */
+body.is-doctor div.doctor-only { display: flex !important; }
+body:not(.is-patient):not(.is-doctor) div.admin-only { display: flex !important; }
+
+.grid-view { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
+.patient-nav .nav-item { color: var(--text-body); transition: all 0.2s; }
+.patient-nav .nav-item:hover { color: var(--primary); text-decoration: none; background: #F1F5F9; }
+.patient-nav .nav-item.active { background: #0EA5E9 !important; color: white !important; }
+
+.action-card { transition: transform 0.2s, box-shadow 0.2s; border: 1px solid var(--border-color); }
+.action-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+
+.badge-pending { background-color: #F1F5F9; color: #475569; }
+.badge-confirmed { background-color: #000; color: #fff; }
+.badge-cancelled { background-color: #FEE2E2; color: #EF4444; }
+
+/* Stepper */
+.step-circle { width: 36px; height: 36px; border-radius: 50%; background: #E2E8F0; color: #64748B; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem; }
+.step-circle.active { background: #0EA5E9; color: white; }
+.step-line { flex: 1; height: 2px; background: #E2E8F0; max-width: 100px; }
+
+/* Doctor Selection Cards */
+.doctor-selection-card { border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.2s; }
+.doctor-selection-card:hover { border-color: #0EA5E9; background: #F0F9FF; }
+.doctor-selection-card.selected { border-color: #0EA5E9; background: #F0F9FF; box-shadow: 0 0 0 1px #0EA5E9; }
+.doctor-selection-card .check-icon { display: none; color: #0EA5E9; }
+.doctor-selection-card.selected .check-icon { display: block; }
+
+/* Time Slots */
+.time-slot { padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; text-align: center; cursor: pointer; font-size: 0.875rem; font-weight: 500; transition: all 0.2s; }
+.time-slot:hover { border-color: #0EA5E9; color: #0EA5E9; }
+.time-slot.selected { background: #0EA5E9; color: white; border-color: #0EA5E9; }
 
 .top-header { height: 72px; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: white;}
 .search-wrapper { position: relative; width: 300px; }
@@ -155,7 +245,12 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 .lang-toggle a:hover { color: white; }
 
 .notification-bell { position: relative; color: var(--primary); cursor: pointer; }
-.notification-badge { position: absolute; top: -2px; right: -2px; background-color: var(--accent); width: 8px; height: 8px; border-radius: 50%; border: 2px solid white; }
+.notification-badge { 
+  position: absolute; top: -5px; right: -5px; background-color: var(--danger); 
+  color: white; font-size: 10px; font-weight: 700; min-width: 16px; height: 16px; 
+  border-radius: 50%; border: 2px solid white; display: flex; align-items: center; 
+  justify-content: center; padding: 0 4px;
+}
 
 /* Notifications Dropdown */
 .notifications-dropdown {
@@ -326,3 +421,76 @@ input:checked + .slider:before { transform: translateX(20px); }
 .toast.show { transform: translateX(0); }
 .toast-icon { color: var(--success); }
 .toast-message { font-size: 0.875rem; font-weight: 500; color: var(--text-main); }
+
+/* Modals */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  padding: 1rem;
+}
+.modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+.modal-card {
+  background: white;
+  width: 100%;
+  max-width: 550px;
+  border-radius: 20px;
+  box-shadow: var(--shadow-xl);
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+.modal-overlay.active .modal-card {
+  transform: translateY(0);
+}
+.modal-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #F8FAFC;
+}
+.modal-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+.modal-close {
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+.modal-close:hover {
+  color: var(--danger);
+}
+.modal-body {
+  padding: 2rem;
+}
+.modal-footer {
+  padding: 1.5rem 2rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  background: #F8FAFC;
+}
+.modal-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+.modal-form-full {
+  grid-column: span 2;
+}
+

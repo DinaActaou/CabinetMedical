@@ -50,5 +50,14 @@ class UserSeeder extends Seeder
                 'email_verified_at' => now(),
             ]);
         }
+
+        // Seed 1 Admin
+        User::create([
+            'name' => 'Administrateur MediBook',
+            'email' => 'admin@medibook.com',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'email_verified_at' => now(),
+        ]);
     }
 }

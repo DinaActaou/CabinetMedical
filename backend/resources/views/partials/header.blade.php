@@ -1,18 +1,35 @@
 <!-- Top Header -->
 <header class="top-header">
   <div class="header-left">
-    <!-- Search bar removed for a cleaner UI -->
+    <div class="logo-container" style="display:flex; align-items:center; gap:0.75rem;">
+        <i data-lucide="stethoscope" style="width:32px; height:32px; color:var(--accent);"></i>
+        <span style="font-weight:700; font-size:1.25rem; color:var(--primary);">MediBook</span>
+    </div>
   </div>
   
   <div class="header-right">
-    <div class="lang-toggle">
-      <a href="/lang/en" class="{{ App::getLocale() == 'en' ? 'active' : '' }}" style="padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; color: #CBD5E1; font-weight: 600; text-decoration: none;">EN</a>
-      <a href="/lang/fr" class="{{ App::getLocale() == 'fr' ? 'active' : '' }}" style="padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; color: #CBD5E1; font-weight: 600; text-decoration: none;">FR</a>
+    <nav class="patient-nav" style="display:none; gap: 1rem; align-items:center; margin-right: 2rem;">
+      <a href="#" class="nav-item active" data-target="screen-patient-home" style="display:flex; align-items:center; gap:0.5rem; padding: 0.5rem 1rem; border-radius: 8px;">
+        <i data-lucide="home"></i> {{ __('Home') }}
+      </a>
+      <a href="#" class="nav-item" data-target="screen-appointments" style="display:flex; align-items:center; gap:0.5rem; padding: 0.5rem 1rem; border-radius: 8px;">
+        <i data-lucide="calendar"></i> {{ __('Appointments') }}
+      </a>
+      <a href="#" class="nav-item" data-target="screen-settings" style="display:flex; align-items:center; gap:0.5rem; padding: 0.5rem 1rem; border-radius: 8px;">
+        <i data-lucide="user"></i> {{ __('Profile') }}
+      </a>
+    </nav>
+
+    <div class="lang-toggle" style="margin-right: 1.5rem;">
+      <a href="/lang/en" class="{{ App::getLocale() == 'en' ? 'active' : '' }}">EN</a>
+      <a href="/lang/fr" class="{{ App::getLocale() == 'fr' ? 'active' : '' }}">FR</a>
     </div>
     
-    <div class="notification-bell" id="notification-trigger">
+    <div class="notification-bell" id="notification-trigger" style="margin-right: 1.5rem;">
       <i data-lucide="bell" style="width:20px;height:20px;"></i>
-      <div class="notification-badge"></div>
+      @if(auth()->check() && auth()->user()->unreadNotifications->count() > 0)
+        <div class="notification-badge">{{ auth()->user()->unreadNotifications->count() }}</div>
+      @endif
       
       <div class="notifications-dropdown" id="notifications-panel">
         <div class="notifications-header">
@@ -20,24 +37,21 @@
           <span class="mark-read">{{ __('Mark all as read') }}</span>
         </div>
         <div class="notifications-list" id="notifications-list">
-          <!-- Sample Notifications -->
-          <div class="notification-item unread">
-            <div class="notif-icon appointment"><i data-lucide="calendar"></i></div>
-            <div class="notif-content">
-              <p><strong>New Appointment</strong>: Sarah Connor for Cardiology at 14:30</p>
-              <span>2 mins ago</span>
-            </div>
-          </div>
-          <div class="notification-item">
-            <div class="notif-icon system"><i data-lucide="info"></i></div>
-            <div class="notif-content">
-              <p>System update completed successfully.</p>
-              <span>1 hour ago</span>
-            </div>
-          </div>
-        </div>
-        <div class="notifications-footer">
-          {{ __('View all notifications') }}
+          @if(auth()->check())
+            @forelse(auth()->user()->unreadNotifications as $notification)
+              <div class="notification-item unread">
+                <div class="notif-icon appointment"><i data-lucide="calendar"></i></div>
+                <div class="notif-content">
+                  <p><strong>{{ $notification->data['title'] }}</strong>: {{ $notification->data['message'] }}</p>
+                  <span>{{ $notification->created_at->diffForHumans() }}</span>
+                </div>
+              </div>
+            @empty
+              <div style="padding: 2rem; text-align: center; color: var(--text-body); font-size: 0.875rem;">
+                {{ __('No new notifications') }}
+              </div>
+            @endforelse
+          @endif
         </div>
       </div>
     </div>

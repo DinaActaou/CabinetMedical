@@ -26,6 +26,7 @@ class AuthController extends Controller
             'role' => $request->role,
         ]);
 
+        Auth::login($user);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -50,6 +51,7 @@ class AuthController extends Controller
             ]);
         }
 
+        Auth::login($user);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([

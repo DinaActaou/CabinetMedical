@@ -3,13 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Models\User;
+use App\Mail\AppointmentConfirmation;
+use App\Notifications\NewAppointmentNotification;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 class AppointmentController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
         $query = Appointment::with(['patient', 'doctor', 'service']);
+
+        // Filter by role: Patients only see their own appointments
+        if ($user->role === 'patient') {
+            $query->where('patient_id', $user->id);
+        }
 
         if ($request->has('search')) {
             $search = $request->query('search');
@@ -47,7 +57,22 @@ class AppointmentController extends Controller
 
         $appointment = Appointment::create($validated);
 
-        return response()->json($appointment->load(['patient', 'doctor', 'service']), 201);
+        // 1. Load relationships
+        $appointment->load('patient', 'doctor', 'service');
+
+        // 2. Send confirmation email to patient
+        Mail::to($appointment->patient->email)
+            ->send(new AppointmentConfirmation($appointment));
+
+        // 3. Notify admin via database notification
+        $admin = User::admin()->first();
+        if ($admin) {
+            $admin->notify(new NewAppointmentNotification($appointment));
+        }
+
+        // 4. Redirect with success flash
+        return redirect()->route('appointments.index')
+            ->with('success', __('messages.appointment_created'));
     }
 
     public function show(Appointment $appointment)
@@ -67,7 +92,15 @@ class AppointmentController extends Controller
             'status' => 'nullable|string'
         ]);
 
+        $oldStatus = $appointment->status;
         $appointment->update($validated);
+
+        // If status was changed to Confirmed, send email
+        if ($oldStatus !== 'Confirmed' && $appointment->status === 'Confirmed') {
+            $appointment->load(['patient', 'doctor', 'service']);
+            Mail::to($appointment->patient->email)
+                ->send(new AppointmentConfirmation($appointment));
+        }
 
         return response()->json($appointment->load(['patient', 'doctor', 'service']));
     }
