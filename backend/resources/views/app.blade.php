@@ -3,65 +3,25 @@
 @section('title', __('Medical Cabinet - Dashboard'))
 
 @section('body')
-  <!-- ================= PORTAL SELECTION ================= -->
-  <section id="screen-portal-selection" class="auth-layout" style="background:#F8FAFC; position: relative;">
-    <!-- Floating Language Switcher for Auth -->
-    <div class="entrance-lang-toggle">
-      <a href="/lang/en" class="{{ app()->getLocale() == 'en' ? 'active' : '' }}">EN</a>
-      <a href="/lang/fr" class="{{ app()->getLocale() == 'fr' ? 'active' : '' }}">FR</a>
-    </div>
-
-    <div style="max-width: 1000px; width: 100%; text-align: center;">
-      <div class="logo-container" style="color:var(--primary); font-size:3rem; font-weight:bold; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 1rem;">
-        <i data-lucide="stethoscope" style="width:50px; height:50px; color:var(--accent);"></i>
-        <span>{{ __('MediBook') }}</span>
-      </div>
-      <p style="color:var(--text-body); margin-bottom: 4rem; font-size: 1.125rem;">{{ __('Medical Appointment Management System') }}</p>
-
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 3rem; margin-top: 2rem; max-width: 900px; margin-left: auto; margin-right: auto;">
-        <!-- Patient Card -->
-        <div class="portal-card" style="border-top: 5px solid var(--accent);">
-          <div class="portal-icon-circle" style="background: #F0F9FF; border: 2px solid var(--accent);">
-            <i data-lucide="user" style="width: 48px; height: 48px; color: var(--accent);"></i>
-          </div>
-          <h2 class="portal-title" style="color: var(--primary);">{{ __('Patient Portal') }}</h2>
-          <p class="portal-description">{{ __('Book appointments, view your schedule, and manage your profile') }}</p>
-          <button class="btn btn-primary portal-btn" onclick="showRoleRegister('patient')" style="background: var(--accent); border-color: var(--accent); color: white;">{{ __('Connect as Patient') }}</button>
-        </div>
-
-        <!-- Doctor/Staff Card -->
-        <div class="portal-card" style="border-top: 5px solid var(--primary);">
-          <div class="portal-icon-circle" style="background: #F0F7FF; border: 2px solid var(--primary);">
-            <i data-lucide="stethoscope" style="width: 48px; height: 48px; color: var(--primary);"></i>
-          </div>
-          <h2 class="portal-title" style="color: var(--primary);">{{ __('Doctor Portal') }}</h2>
-          <p class="portal-description">{{ __('Manage your schedule, oversee patients, and manage cabinet services') }}</p>
-          <button class="btn btn-primary portal-btn" onclick="showRoleLogin('doctor')" style="background: var(--primary); border-color: var(--primary); color: white;">{{ __('Connect as Doctor') }}</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
+  <script>
+    window.__INITIAL_DATA__ = @json($initialData ?? []);
+  </script>
   <!-- ================= AUTH SCREENS ================= -->
-  <section id="screen-login" class="auth-layout hidden" style="background: #F8FAFC; position: relative;">
+  <section id="screen-login" class="auth-layout" style="background: #F8FAFC; position: relative;">
     <div class="entrance-lang-toggle">
       <a href="/lang/en" class="{{ app()->getLocale() == 'en' ? 'active' : '' }}">EN</a>
       <a href="/lang/fr" class="{{ app()->getLocale() == 'fr' ? 'active' : '' }}">FR</a>
     </div>
     <div class="auth-card">
-      <div style="margin-bottom: 2rem;">
-        <a href="#" onclick="showPortalSelection()" style="color:var(--text-muted); font-size:0.875rem; display:flex; align-items:center; gap:0.5rem; justify-content:center; text-decoration:none;">
-          <i data-lucide="arrow-left" style="width:14px;"></i> {{ __('Back to Portals') }}
-        </a>
+      <div class="auth-card-brand">
+        <i data-lucide="stethoscope" class="auth-card-brand-icon" aria-hidden="true"></i>
+        <span class="auth-card-wordmark">{{ __('MediBook') }}</span>
       </div>
-      <div class="logo-container" style="color:var(--primary); font-size:2rem; font-weight:bold; margin-bottom: 1.5rem; display:flex; align-items:center; justify-content:center; gap:0.5rem;">
-        <i data-lucide="stethoscope" style="width:32px; height:32px; color:var(--accent);"></i>
-        <span>{{ __('MediBook') }}</span>
-      </div>
-      <h2 id="login-role-title" style="margin-bottom: 1.5rem; color: var(--primary); text-align:center;">{{ __('Login') }}</h2>
-      <form id="form-login">
-        <div class="form-group"><input type="email" id="login-email" class="form-control" placeholder="{{ __('Email') }}" value="aktaoudina@medibook.com" required></div>
-        <div class="form-group mb-4"><input type="password" id="login-password" class="form-control" placeholder="{{ __('Password') }}" value="password" required></div>
+      <h2 id="login-role-title" style="margin-bottom: 1.5rem; color: var(--primary); text-align:center;">{{ __('Sign in') }}</h2>
+      <form id="form-login" method="POST" action="{{ route('web.login') }}">
+        @csrf
+        <div class="form-group"><input type="email" id="login-email" name="email" class="form-control" placeholder="{{ __('Email') }}" required autocomplete="email"></div>
+        <div class="form-group mb-4"><input type="password" id="login-password" name="password" class="form-control" placeholder="{{ __('Password') }}" required autocomplete="current-password"></div>
         <button type="submit" class="btn btn-primary w-full">{{ __('Sign In') }}</button>
       </form>
       <p style="margin-top: 2rem; font-size: 0.875rem; text-align:center; color: var(--text-muted);">
@@ -77,22 +37,18 @@
       <a href="/lang/fr" class="{{ app()->getLocale() == 'fr' ? 'active' : '' }}">FR</a>
     </div>
     <div class="auth-card">
-      <div style="margin-bottom: 2rem;">
-        <a href="#" onclick="showPortalSelection()" style="color:var(--text-muted); font-size:0.875rem; display:flex; align-items:center; gap:0.5rem; justify-content:center; text-decoration:none;">
-          <i data-lucide="arrow-left" style="width:14px;"></i> {{ __('Back to Portals') }}
-        </a>
-      </div>
-      <div class="logo-container" style="color:var(--primary); font-size:2rem; font-weight:bold; margin-bottom: 1.5rem; display:flex; align-items:center; justify-content:center; gap:0.5rem;">
-        <i data-lucide="stethoscope" style="width:32px; height:32px; color:var(--accent);"></i>
-        <span>{{ __('MediBook') }}</span>
+      <div class="auth-card-brand">
+        <i data-lucide="stethoscope" class="auth-card-brand-icon" aria-hidden="true"></i>
+        <span class="auth-card-wordmark">{{ __('MediBook') }}</span>
       </div>
       <h2 style="margin-bottom: 1.5rem; color: var(--primary); text-align:center;">{{ __('Create Account') }}</h2>
-      <form id="form-register">
-        <input type="hidden" id="reg-role" value="patient">
-        <div class="form-group"><input type="text" id="reg-name" class="form-control" placeholder="{{ __('Full Name') }}" required></div>
-        <div class="form-group"><input type="email" id="reg-email" class="form-control" placeholder="{{ __('Email Address') }}" required></div>
-        <div class="form-group"><input type="password" id="reg-password" class="form-control" placeholder="{{ __('Password') }}" required></div>
-        <div class="form-group mb-4"><input type="password" id="reg-password-confirm" class="form-control" placeholder="{{ __('Confirm Password') }}" required></div>
+      <p style="text-align:center; color:var(--text-muted); font-size:0.875rem; margin-bottom:1.5rem;">{{ __('You will be registered as a patient. An administrator can grant doctor access later.') }}</p>
+      <form id="form-register" method="POST" action="{{ route('web.register') }}">
+        @csrf
+        <div class="form-group"><input type="text" id="reg-name" name="name" class="form-control" placeholder="{{ __('Full Name') }}" required></div>
+        <div class="form-group"><input type="email" id="reg-email" name="email" class="form-control" placeholder="{{ __('Email Address') }}" required></div>
+        <div class="form-group"><input type="password" id="reg-password" name="password" class="form-control" placeholder="{{ __('Password') }}" required></div>
+        <div class="form-group mb-4"><input type="password" id="reg-password-confirm" name="password_confirmation" class="form-control" placeholder="{{ __('Confirm Password') }}" required></div>
         <button type="submit" class="btn btn-primary w-full">{{ __('Sign Up') }}</button>
       </form>
       <p style="margin-top: 2rem; font-size: 0.875rem; text-align:center; color: var(--text-muted);">
@@ -115,51 +71,65 @@
       <div class="page-content">
         
         <!-- Screen: Dashboard (Admin & Doctor) -->
-        <div id="screen-dashboard-content" class="dashboard-page">
-          <div class="page-header" style="margin-bottom: 2rem;">
-            <h1 class="page-title">{{ __('Dashboard') }}</h1>
-            <p class="page-subtitle" id="dashboard-welcome-text">{{ __('Welcome back!') }}</p>
+        <div id="screen-dashboard-content" class="dashboard-page staff-dashboard">
+          <header class="staff-dashboard-header">
+            <div>
+              <h1 class="page-title staff-dashboard-title">{{ __('Dashboard') }}</h1>
+              <p class="page-subtitle staff-dashboard-subtitle" id="dashboard-welcome-text">{{ __('Welcome back!') }}</p>
+            </div>
+          </header>
+
+          <div class="staff-stats-grid">
+            <article class="staff-stat-card staff-stat-card--neutral">
+              <div class="staff-stat-card__icon" aria-hidden="true"><i data-lucide="calendar"></i></div>
+              <div class="staff-stat-card__main">
+                <div class="staff-stat-card__value" id="stat-total-today">0</div>
+                <div class="staff-stat-card__label">{{ __("Today's Appointments") }}</div>
+              </div>
+            </article>
+            <article class="staff-stat-card staff-stat-card--neutral doctor-only">
+              <div class="staff-stat-card__icon" aria-hidden="true"><i data-lucide="users"></i></div>
+              <div class="staff-stat-card__main">
+                <div class="staff-stat-card__value" id="stat-total-patients-doctor">0</div>
+                <div class="staff-stat-card__label">{{ __('Total Patients') }}</div>
+              </div>
+            </article>
+            <article class="staff-stat-card staff-stat-card--neutral doctor-only">
+              <div class="staff-stat-card__icon" aria-hidden="true"><i data-lucide="clock"></i></div>
+              <div class="staff-stat-card__main">
+                <div class="staff-stat-card__value" id="stat-upcoming-count">0</div>
+                <div class="staff-stat-card__label">{{ __('Planned') }}</div>
+              </div>
+            </article>
+            <article class="staff-stat-card staff-stat-card--confirmed admin-only">
+              <div class="staff-stat-card__icon" aria-hidden="true"><i data-lucide="check-circle"></i></div>
+              <div class="staff-stat-card__main">
+                <div class="staff-stat-card__value" id="stat-confirmed">0</div>
+                <div class="staff-stat-card__label">{{ __('Confirmed') }}</div>
+              </div>
+            </article>
+            <article class="staff-stat-card staff-stat-card--pending admin-only">
+              <div class="staff-stat-card__icon" aria-hidden="true"><i data-lucide="alert-circle"></i></div>
+              <div class="staff-stat-card__main">
+                <div class="staff-stat-card__value" id="stat-pending">0</div>
+                <div class="staff-stat-card__label">{{ __('Pending') }}</div>
+              </div>
+            </article>
+            <article class="staff-stat-card staff-stat-card--cancelled admin-only">
+              <div class="staff-stat-card__icon" aria-hidden="true"><i data-lucide="x-circle"></i></div>
+              <div class="staff-stat-card__main">
+                <div class="staff-stat-card__value" id="stat-cancelled">0</div>
+                <div class="staff-stat-card__label">{{ __('Cancelled') }}</div>
+              </div>
+            </article>
           </div>
 
-          <div class="stats-grid">
-            <div class="stat-card blue">
-              <div class="stat-icon-bg"><i data-lucide="calendar"></i></div>
-              <div class="stat-value" id="stat-total-today">0</div>
-              <div class="stat-label">{{ __("Today's Appointments") }}</div>
-            </div>
-            <div class="stat-card dark-blue doctor-only" style="background:#1E3A5F; color:white;">
-              <div class="stat-icon-bg" style="background:rgba(255,255,255,0.1); color:white;"><i data-lucide="users"></i></div>
-              <div class="stat-value" id="stat-total-patients-doctor">0</div>
-              <div class="stat-label" style="color:rgba(255,255,255,0.8)">{{ __('Total Patients') }}</div>
-            </div>
-            <div class="stat-card light-blue doctor-only" style="background:#0EA5E9; color:white;">
-              <div class="stat-icon-bg" style="background:rgba(255,255,255,0.2); color:white;"><i data-lucide="clock"></i></div>
-              <div class="stat-value" id="stat-upcoming-count">0</div>
-              <div class="stat-label" style="color:rgba(255,255,255,0.8)">{{ __('Upcoming') }}</div>
-            </div>
-            <div class="stat-card green admin-only">
-              <div class="stat-icon-bg"><i data-lucide="check-circle"></i></div>
-              <div class="stat-value" id="stat-confirmed">0</div>
-              <div class="stat-label">{{ __('Confirmed') }}</div>
-            </div>
-            <div class="stat-card orange admin-only">
-              <div class="stat-icon-bg"><i data-lucide="alert-circle"></i></div>
-              <div class="stat-value" id="stat-pending">0</div>
-              <div class="stat-label">{{ __('Pending') }}</div>
-            </div>
-            <div class="stat-card red admin-only">
-              <div class="stat-icon-bg"><i data-lucide="x-circle"></i></div>
-              <div class="stat-value" id="stat-cancelled">0</div>
-              <div class="stat-label">{{ __('Cancelled') }}</div>
-            </div>
-          </div>
-
-          <div class="list-card mt-6">
-            <div class="list-header">
-              <i data-lucide="clock" style="width: 20px; height: 20px;"></i>
+          <div class="list-card staff-schedule-card mt-6">
+            <div class="list-header staff-schedule-card__header">
+              <i data-lucide="clock" class="staff-schedule-card__header-icon" aria-hidden="true"></i>
               <span>{{ __("Today's Schedule") }}</span>
             </div>
-            <div id="dashboard-today-list">
+            <div id="dashboard-today-list" class="staff-schedule-card__body">
               <!-- Injected via JS -->
             </div>
           </div>
@@ -239,15 +209,16 @@
             </button>
           </div>
 
+          <div class="table-toolbar appointments-search-toolbar" style="margin-bottom: 1rem;">
+            <div class="search-wrapper" style="width: 400px; max-width:100%;">
+              <i data-lucide="search"></i>
+              <input type="text" id="search-appointments" placeholder="{{ __('Search for appointments...') }}" autocomplete="off" style="background:white; border:1px solid var(--border-color)">
+            </div>
+          </div>
+
           <div id="patient-appointments-list" class="hidden" style="display:flex; flex-direction:column; gap:1rem;"></div>
 
           <div id="admin-appointments-table" class="page-table-wrapper">
-            <div class="table-toolbar">
-              <div class="search-wrapper" style="width: 400px; max-width:100%;">
-                <i data-lucide="search"></i>
-                <input type="text" id="search-appointments" placeholder="{{ __('Search...') }}" style="background:white; border:1px solid var(--border-color)">
-              </div>
-            </div>
             <div style="overflow-x:auto;">
               <table>
                 <thead>
@@ -275,13 +246,22 @@
           <div id="services-grid" class="grid-view"></div>
         </div>
 
-        <!-- Screen: Users -->
-        <div id="screen-users-content" class="dashboard-page hidden">
+        <!-- Screen: Admin — Doctors -->
+        <div id="screen-admin-doctors-content" class="dashboard-page hidden">
           <div class="page-header">
-            <h1 class="page-title">{{ __('User Management') }}</h1>
-            <p class="page-subtitle">{{ __('Manage application users and their roles') }}</p>
+            <h1 class="page-title">{{ __('Doctors') }}</h1>
+            <p class="page-subtitle">{{ __('Manage doctor accounts and permissions') }}</p>
           </div>
-          <div id="users-grid" class="grid-view"></div>
+          <div id="admin-doctors-grid" class="grid-view"></div>
+        </div>
+
+        <!-- Screen: Admin — Patients -->
+        <div id="screen-admin-patients-content" class="dashboard-page hidden">
+          <div class="page-header">
+            <h1 class="page-title">{{ __('Patients') }}</h1>
+            <p class="page-subtitle">{{ __('Manage patient accounts and promote users to doctor') }}</p>
+          </div>
+          <div id="admin-patients-grid" class="grid-view"></div>
         </div>
 
         <!-- Screen: Multi-Step Booking -->
@@ -364,14 +344,15 @@
                     <span id="confirm-time" style="font-weight:700; color:var(--primary);">--</span>
                 </div>
             </div>
+
+            <div id="booking-confirmation-feedback" class="booking-confirmation-feedback hidden" role="status" aria-live="polite">
+              <i data-lucide="check-circle" class="booking-confirmation-feedback-icon" aria-hidden="true"></i>
+              <span id="booking-confirmation-feedback-text"></span>
+            </div>
             
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem;">
                 <button class="btn btn-outline" style="height: 50px;" onclick="bookingPrevStep(3)">{{ __('Back') }}</button>
                 <button id="btn-confirm-booking" class="btn btn-primary" style="height: 50px;" onclick="handleConfirmBooking()">{{ __('Confirm Booking') }}</button>
-            </div>
-            <div id="booking-confirmation-feedback" class="booking-confirmation-feedback hidden">
-              <i data-lucide="check-circle"></i>
-              <span>{{ __('Appointment booked successfully!') }}</span>
             </div>
           </div>
         </section>
@@ -404,30 +385,10 @@
               
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
                 <div class="form-group"><label class="form-label">{{ __('Full Name') }}</label><input type="text" id="settings-name" class="form-control" style="background:#F8FAFC;"></div>
-                <div class="form-group doctor-only"><label class="form-label">{{ __('Specialty') }}</label><input type="text" class="form-control" style="background:#F8FAFC;" value="{{ __('Cardiology') }}"></div>
+                <div class="form-group doctor-only"><label class="form-label">{{ __('Specialty') }}</label><input type="text" id="settings-specialty" class="form-control" style="background:#F8FAFC;" placeholder="{{ __('Not specified') }}"></div>
               </div>
               <div class="form-group mb-8"><label class="form-label">{{ __('Email Address') }}</label><input type="email" id="settings-email" class="form-control" style="background:#F8FAFC;"></div>
               
-              <div class="doctor-only" style="margin-top: 3rem;">
-                <div style="margin-bottom: 2.5rem; padding-bottom: 1rem; border-bottom: 1px solid #F1F5F9;">
-                  <h3 style="font-size: 1.25rem; color: var(--primary);">{{ __('Practice Details') }}</h3>
-                </div>
-                
-                <div class="form-group mb-6"><label class="form-label">{{ __('Working Hours') }}</label><input type="text" class="form-control" style="background:#F8FAFC;" value="09:00 - 17:00"></div>
-                <div class="form-group">
-                  <label class="form-label" style="margin-bottom: 1rem;">{{ __('Availability Days') }}</label>
-                  <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:1rem;">
-                    <button class="day-btn active">{{ __('Mon') }}</button>
-                    <button class="day-btn active">{{ __('Tue') }}</button>
-                    <button class="day-btn active">{{ __('Wed') }}</button>
-                    <button class="day-btn">{{ __('Thu') }}</button>
-                    <button class="day-btn active">{{ __('Fri') }}</button>
-                    <button class="day-btn">{{ __('Sat') }}</button>
-                    <button class="day-btn">{{ __('Sun') }}</button>
-                  </div>
-                </div>
-              </div>
-
               <div style="margin-top: 4rem; text-align: right;">
                 <button class="btn btn-primary" style="padding: 0.75rem 3rem; background: var(--primary); font-size: 1rem;">{{ __('Save Profile') }}</button>
               </div>
@@ -436,10 +397,29 @@
         </div>
 
       </div> <!-- End page-content -->
+
+      <footer class="app-footer" role="contentinfo">
+        <p>{{ __('MediBook') }} — {{ date('Y') }}. {{ __('All rights reserved.') }}</p>
+      </footer>
     </main>
   </div> <!-- End dashboard-layout -->
 
-  <div id="toast-container"></div>
+  <!-- Confirm (delete / cancel / critical actions) -->
+  <div id="modal-confirm" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="modal-confirm-title">
+    <div class="modal-card modal-card--confirm">
+      <div class="modal-header">
+        <h3 id="modal-confirm-title"></h3>
+        <button type="button" class="modal-close" aria-label="{{ __('Close') }}"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p id="modal-confirm-message" class="modal-confirm-message"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline modal-cancel">{{ __('Cancel') }}</button>
+        <button type="button" class="btn btn-primary" id="modal-confirm-ok"></button>
+      </div>
+    </div>
+  </div>
 
   <!-- Appointment Modal -->
   <div id="modal-appointment" class="modal-overlay">
@@ -448,39 +428,41 @@
         <h3 id="modal-appointment-title">{{ __('Manage Appointment') }}</h3>
         <button class="modal-close"><i data-lucide="x"></i></button>
       </div>
-      <form id="form-appointment">
+      <form id="form-appointment" method="POST" action="{{ route('web.appointments.store') }}">
+        @csrf
+        <input type="hidden" id="appointment-method" name="_method" value="POST">
         <div class="modal-body">
           <input type="hidden" id="appointment-id">
           
           <div class="modal-form-grid">
             <div class="form-group modal-form-full" id="patient-select-group">
               <label class="form-label">{{ __('Patient') }}</label>
-              <select id="select-patient" class="form-control" required></select>
+              <select id="select-patient" name="patient_id" class="form-control" required></select>
             </div>
             
             <div class="form-group" id="doctor-select-group">
               <label class="form-label">{{ __('Doctor') }}</label>
-              <select id="select-doctor" class="form-control" required></select>
+              <select id="select-doctor" name="doctor_id" class="form-control" required></select>
             </div>
             
             <div class="form-group">
               <label class="form-label">{{ __('Service') }}</label>
-              <select id="select-service" class="form-control" required></select>
+              <select id="select-service" name="service_id" class="form-control" required></select>
             </div>
             
             <div class="form-group">
               <label class="form-label">{{ __('Date') }}</label>
-              <input type="date" id="appointment-date" class="form-control" required>
+              <input type="date" id="appointment-date" name="appointment_date" class="form-control" required>
             </div>
             
             <div class="form-group">
               <label class="form-label">{{ __('Time') }}</label>
-              <input type="time" id="appointment-time" class="form-control" required>
+              <input type="time" id="appointment-time" name="appointment_time" class="form-control" required>
             </div>
             
             <div class="form-group modal-form-full" id="status-select-group">
               <label class="form-label">{{ __('Status') }}</label>
-              <select id="appointment-status" class="form-control" required>
+              <select id="appointment-status" name="status" class="form-control" required>
                 <option value="Pending">{{ __('Pending') }}</option>
                 <option value="Confirmed">{{ __('Confirmed') }}</option>
                 <option value="Cancelled">{{ __('Cancelled') }}</option>
@@ -496,4 +478,8 @@
       </form>
     </div>
   </div>
+
+  <form id="form-logout" method="POST" action="{{ route('web.logout') }}" class="hidden">
+    @csrf
+  </form>
 @endsection

@@ -30,8 +30,8 @@ class UserFactory extends Factory
         $patientNames = ['Ahmed Benjelloun', 'Fatima Ezzahra', 'Youssef Alami', 'Nadia Tazi', 'Omar Chraibi'];
         $doctorNames = ['Dr. Karim Benali', 'Dr. Sara Moussaoui', 'Dr. Hassan Idrissi', 'Dr. Leila Fassi', 'Dr. Mehdi Squalli'];
 
-        $name = ($role === 'patient') 
-            ? fake()->randomElement($patientNames) 
+        $name = ($role === 'patient')
+            ? fake()->randomElement($patientNames)
             : fake()->randomElement($doctorNames);
 
         return [
@@ -51,6 +51,16 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
+        ]);
+    }
+
+    /** Patient approuvé pour démo / RDV (factory + seeder). */
+    public function demoPatient(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'patient',
+            'status' => 'approved',
+            'name' => fake()->name(),
         ]);
     }
 }

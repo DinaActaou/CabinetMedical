@@ -12,6 +12,7 @@ class AppointmentSeeder extends Seeder
      */
     public function run(): void
     {
+        // Au moins 20 rendez-vous pour démonstration immédiate
         Appointment::factory()->count(20)->create();
     }
 }

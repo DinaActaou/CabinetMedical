@@ -3,26 +3,30 @@ const API_BASE_URL = '/api';
 
 // === STATE ===
 let currentUser = null;
-let token = localStorage.getItem('auth_token');
 let currentLang = (document.documentElement.lang || 'en').substring(0, 2);
 let bookingCalendarCursor = null;
 let bookingBookedTimes = [];
+const initialData = window.__INITIAL_DATA__ || {};
+let notificationPollTimer = null;
+/** @type {null | (() => void)} */
+let confirmModalCallback = null;
 
 // Booking State
 let bookingData = { serviceId: null, doctorId: null, date: null, time: null };
+/** Doctor id → display name for booking cards (avoid broken inline onclick with quotes). */
+let bookingDoctorNameById = {};
 
 // === AXIOS CONFIG ===
 axios.defaults.baseURL = API_BASE_URL;
 axios.defaults.headers.common['Accept'] = 'application/json';
-if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-}
+axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
 axios.interceptors.response.use(
     response => response,
     error => {
         if (error.response && error.response.status === 401) {
-            if (!error.config.url.includes('/logout')) logout();
+            showLogin();
         }
         return Promise.reject(error);
     }
@@ -39,9 +43,94 @@ async function apiFetch(endpoint, options = {}) {
     return response.data;
 }
 
+/** Requêtes JSON sur le groupe « web » (session + CSRF), pour le booking patient. */
+async function webSessionJson(path, options = {}) {
+    const response = await axios({
+        url: path,
+        baseURL: '',
+        method: options.method || 'GET',
+        data: options.body ? JSON.parse(options.body) : null,
+        params: options.params || null,
+        headers: {
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+        withCredentials: true,
+    });
+    return response.data;
+}
+
+async function fetchAppointmentsFromApi(searchQuery = '') {
+    const q = (searchQuery || '').trim();
+    const params = q ? { search: q } : {};
+    const data = await webSessionJson('/web-api/appointments', { method: 'GET', params });
+    return Array.isArray(data) ? data : [];
+}
+
+function openConfirmModal({ title, message, confirmLabel = null, danger = false, onConfirm }) {
+    const modal = document.getElementById('modal-confirm');
+    const titleEl = document.getElementById('modal-confirm-title');
+    const msgEl = document.getElementById('modal-confirm-message');
+    const okBtn = document.getElementById('modal-confirm-ok');
+    if (!modal || !titleEl || !msgEl || !okBtn) return;
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    okBtn.textContent = confirmLabel || t('Confirm');
+    okBtn.className = danger ? 'btn btn-danger' : 'btn btn-primary';
+    confirmModalCallback = typeof onConfirm === 'function' ? onConfirm : null;
+    modal.classList.add('active');
+    lucide.createIcons();
+}
+
+function submitWebForm(action, method = 'POST', fields = {}) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = action;
+
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const tokenInput = document.createElement('input');
+    tokenInput.type = 'hidden';
+    tokenInput.name = '_token';
+    tokenInput.value = csrf;
+    form.appendChild(tokenInput);
+
+    if (method.toUpperCase() !== 'POST') {
+        const methodInput = document.createElement('input');
+        methodInput.type = 'hidden';
+        methodInput.name = '_method';
+        methodInput.value = method.toUpperCase();
+        form.appendChild(methodInput);
+    }
+
+    Object.entries(fields).forEach(([key, value]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = value ?? '';
+        form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+}
+
 function t(key) {
     if (!window.translations || !window.translations[currentLang]) return key;
     return window.translations[currentLang][key] || key;
+}
+
+function serviceNameLabel(name) {
+    return name ? t(name) : '';
+}
+
+function serviceDescriptionLabel(description) {
+    return description ? t(description) : '';
+}
+
+function servicePriceLabel(price) {
+    if (price === null || price === undefined || price === '') return '';
+    return `${price} ${t('currency_dh')}`;
 }
 
 function debounce(func, wait) {
@@ -66,21 +155,36 @@ function formatDoctorName(name) {
     return `Dr. ${cleanName || t('Unknown')}`;
 }
 
+function appointmentStatusIsCancelled(status) {
+    const s = (status || '').toString().trim().toLowerCase();
+    return ['cancelled', 'canceled', 'annulé', 'annule'].includes(s);
+}
+
+/** Upcoming (today or later / not in the past) and not cancelled — patient may release the slot. */
+function appointmentCanBePatientCancelled(app) {
+    if (!app || appointmentStatusIsCancelled(app.status)) return false;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dateTimeStr = `${app.appointment_date}T${app.appointment_time || '23:59:59'}`;
+    const appointmentDateTime = new Date(dateTimeStr);
+    if (!isNaN(appointmentDateTime.getTime())) {
+        return appointmentDateTime >= now;
+    }
+    const appointmentDate = new Date(app.appointment_date);
+    return !isNaN(appointmentDate.getTime()) && appointmentDate >= todayStart;
+}
+
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
     try {
         lucide.createIcons();
-        if (!token) {
-            showLogin();
+        currentUser = initialData.user || null;
+        if (currentUser) {
+            showDashboard();
+            loadInitialData();
         } else {
-            currentUser = await apiFetch('/user');
-            if (currentUser) {
-                showDashboard();
-                loadInitialData();
-            } else {
-                showLogin();
-            }
+            showLogin();
         }
     } catch (err) {
         console.error('Initialization error:', err);
@@ -94,9 +198,11 @@ function setupEventListeners() {
     document.addEventListener('click', (e) => {
         const link = e.target.closest('.nav-item');
         if (!link || link.id === 'btn-logout') return;
-        e.preventDefault();
         const target = link.getAttribute('data-target');
-        if (target) switchScreen(target);
+        if (target) {
+            e.preventDefault();
+            switchScreen(target);
+        }
     });
 
     const searchInput = document.getElementById('search-appointments');
@@ -105,28 +211,33 @@ function setupEventListeners() {
         searchInput.addEventListener('input', (e) => debouncedSearch(e.target.value));
     }
 
-    document.getElementById('form-login')?.addEventListener('submit', handleLogin);
-    document.getElementById('form-register')?.addEventListener('submit', handleRegister);
-    
     document.getElementById('link-to-register')?.addEventListener('click', (e) => {
         e.preventDefault();
         document.getElementById('screen-login').classList.add('hidden');
         document.getElementById('screen-register').classList.remove('hidden');
+        lucide.createIcons();
     });
     
     document.getElementById('link-to-login')?.addEventListener('click', (e) => {
         e.preventDefault();
         document.getElementById('screen-register').classList.add('hidden');
         document.getElementById('screen-login').classList.remove('hidden');
+        lucide.createIcons();
     });
 
     document.addEventListener('click', (e) => {
-        if (e.target.closest('#btn-logout') || e.target.closest('#btn-logout-header') || e.target.closest('#btn-logout-patient')) logout();
+        if (e.target.closest('#btn-logout') || e.target.closest('#btn-logout-header')) {
+            e.preventDefault();
+            document.getElementById('form-logout')?.submit();
+        }
     });
 
     document.querySelectorAll('[data-modal]').forEach(btn => {
         btn.addEventListener('click', () => {
             const modalId = btn.getAttribute('data-modal');
+            if (modalId === 'modal-appointment' && currentUser?.role === 'doctor') {
+                return;
+            }
             const modal = document.getElementById(modalId);
             if (modal) {
                 if (modalId === 'modal-appointment') {
@@ -141,24 +252,189 @@ function setupEventListeners() {
     document.addEventListener('click', (e) => {
         if (e.target.closest('.modal-close') || e.target.closest('.modal-cancel')) {
             const modal = e.target.closest('.modal-overlay');
+            if (modal?.id === 'modal-confirm') {
+                confirmModalCallback = null;
+            }
             if (modal) modal.classList.remove('active');
         }
     });
 
-    document.getElementById('form-appointment')?.addEventListener('submit', handleSaveAppointment);
+    document.getElementById('modal-confirm-ok')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const cb = confirmModalCallback;
+        confirmModalCallback = null;
+        document.getElementById('modal-confirm')?.classList.remove('active');
+        if (typeof cb === 'function') {
+            cb();
+        }
+    });
 
     const notifTrigger = document.getElementById('notification-trigger');
     const notifPanel = document.getElementById('notifications-panel');
+    const markReadBtn = document.getElementById('mark-all-read');
     if (notifTrigger && notifPanel) {
         notifTrigger.addEventListener('click', (e) => {
             e.stopPropagation();
             notifPanel.classList.toggle('active');
+            if (notifPanel.classList.contains('active')) {
+                refreshNotificationsFromServer();
+            }
         });
         document.addEventListener('click', (e) => {
             if (!notifPanel.contains(e.target) && !notifTrigger.contains(e.target)) {
                 notifPanel.classList.remove('active');
             }
         });
+    }
+    if (markReadBtn) {
+        markReadBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            markAllNotificationsRead();
+        });
+    }
+    document.getElementById('notifications-list')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.notif-mark-read');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const id = btn.getAttribute('data-notif-id');
+        if (id) markSingleNotificationRead(id);
+    });
+}
+
+function escapeHtml(text) {
+    if (text == null) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function formatNotificationTime(iso) {
+    try {
+        const d = new Date(iso);
+        const loc = (currentLang || 'en').substring(0, 2) === 'fr' ? 'fr-FR' : 'en-GB';
+        return d.toLocaleString(loc, { dateStyle: 'short', timeStyle: 'short' });
+    } catch {
+        return '';
+    }
+}
+
+function updateNotificationBadge(count) {
+    const badge = document.getElementById('notification-badge');
+    if (!badge) return;
+    const n = Number(count) || 0;
+    if (n > 0) {
+        badge.textContent = String(n);
+        badge.classList.remove('notification-badge--hidden');
+    } else {
+        badge.textContent = '';
+        badge.classList.add('notification-badge--hidden');
+    }
+}
+
+function renderNotificationsList(items) {
+    const list = document.getElementById('notifications-list');
+    if (!list) return;
+    if (!items || items.length === 0) {
+        list.innerHTML = `<div class="notifications-empty">${escapeHtml(t('No notifications yet.'))}</div>`;
+        return;
+    }
+    list.innerHTML = items.map((n) => {
+        const d = n.data || {};
+        const title = escapeHtml(d.title || '');
+        const message = escapeHtml(d.message || '');
+        const read = Boolean(n.read_at);
+        const rowClass = read ? 'is-read' : 'is-unread';
+        const btn = read ? '' : `<button type="button" class="notif-mark-read" data-notif-id="${escapeHtml(n.id)}">${escapeHtml(t('Mark as read'))}</button>`;
+        const time = escapeHtml(formatNotificationTime(n.created_at));
+        return `<div class="notification-item ${rowClass}" data-notification-id="${escapeHtml(n.id)}">
+            <div class="notif-icon appointment"><i data-lucide="calendar"></i></div>
+            <div class="notif-content">
+                <p class="notif-content__title"><strong>${title}</strong></p>
+                <p class="notif-content__message">${message}</p>
+                <span class="notif-content__time">${time}</span>
+            </div>${btn}
+        </div>`;
+    }).join('');
+}
+
+async function refreshNotificationsFromServer() {
+    const list = document.getElementById('notifications-list');
+    if (!list) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    try {
+        const response = await fetch('/web-api/notifications', {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrf,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        updateNotificationBadge(payload.unread_count);
+        renderNotificationsList(payload.notifications || []);
+        lucide.createIcons();
+    } catch (err) {
+        console.error('Failed to load notifications:', err);
+    }
+}
+
+async function markSingleNotificationRead(id) {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    try {
+        const response = await fetch(`/web-api/notifications/${encodeURIComponent(id)}/read`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrf,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        await refreshNotificationsFromServer();
+    } catch (err) {
+        console.error('Failed to mark notification read:', err);
+    }
+}
+
+async function markAllNotificationsRead() {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    try {
+        const response = await fetch('/web-api/notifications/read-all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrf,
+            },
+            credentials: 'same-origin',
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        await refreshNotificationsFromServer();
+    } catch (err) {
+        console.error('Failed to mark notifications as read:', err);
+    }
+}
+
+function startNotificationPolling() {
+    stopNotificationPolling();
+    if (!currentUser) return;
+    notificationPollTimer = setInterval(() => refreshNotificationsFromServer(), 50000);
+}
+
+function stopNotificationPolling() {
+    if (notificationPollTimer) {
+        clearInterval(notificationPollTimer);
+        notificationPollTimer = null;
     }
 }
 
@@ -170,6 +446,9 @@ function switchScreen(target) {
         if (!allowed.includes(target)) target = 'screen-patient-home';
     } else if (currentUser.role === 'doctor') {
         const allowed = ['screen-dashboard', 'screen-appointments', 'screen-doctor-patients', 'screen-settings'];
+        if (!allowed.includes(target)) target = 'screen-dashboard';
+    } else if (currentUser.role === 'admin') {
+        const allowed = ['screen-dashboard', 'screen-appointments', 'screen-services', 'screen-admin-doctors', 'screen-admin-patients', 'screen-settings'];
         if (!allowed.includes(target)) target = 'screen-dashboard';
     }
 
@@ -185,48 +464,24 @@ function switchScreen(target) {
         
         if (target === 'screen-dashboard') loadDashboardStats();
         if (target === 'screen-patient-home') loadPatientHome();
-        if (target === 'screen-appointments') loadAppointments();
+        if (target === 'screen-appointments') {
+            const si = document.getElementById('search-appointments');
+            if (si) si.value = '';
+            loadAppointments('');
+        }
         if (target === 'screen-services') loadServices();
-        if (target === 'screen-users') loadUsers();
+        if (target === 'screen-admin-doctors') loadAdminDoctors();
+        if (target === 'screen-admin-patients') loadAdminPatients();
         if (target === 'screen-book-appointment') initBookingProcess();
         if (target === 'screen-doctor-patients') loadDoctorPatients();
     }
 }
 
-function showPortalSelection() {
-    document.getElementById('screen-portal-selection').classList.remove('hidden');
-    document.getElementById('screen-login').classList.add('hidden');
-    document.getElementById('screen-register').classList.add('hidden');
-    document.getElementById('dashboard-layout').classList.add('hidden');
-}
-
-function showRoleRegister(role) {
-    document.getElementById('screen-portal-selection').classList.add('hidden');
-    document.getElementById('screen-register').classList.remove('hidden');
-    
-    const roleSelect = document.getElementById('reg-role');
-    if (roleSelect) {
-        roleSelect.value = role;
-    }
-}
-
-function showRoleLogin(role) {
-    document.getElementById('screen-portal-selection').classList.add('hidden');
-    document.getElementById('screen-login').classList.remove('hidden');
-    
-    const title = document.getElementById('login-role-title');
-    const emailInput = document.getElementById('login-email');
-    
-    if (role === 'admin') {
-        title.textContent = t('Administrator Login');
-        emailInput.value = 'admin@medibook.com';
-    } else {
-        title.textContent = t(role.charAt(0).toUpperCase() + role.slice(1) + ' Login');
-    }
-}
-
 function showLogin() {
-    showPortalSelection();
+    stopNotificationPolling();
+    document.getElementById('screen-login')?.classList.remove('hidden');
+    document.getElementById('screen-register')?.classList.add('hidden');
+    document.getElementById('dashboard-layout')?.classList.add('hidden');
 }
 
 function updateSidebarLinks() {
@@ -234,7 +489,22 @@ function updateSidebarLinks() {
     if (!sidebarNav || !currentUser) return;
 
     let links = '';
-    if (currentUser.role === 'doctor') {
+    if (currentUser.role === 'patient') {
+        links = `
+            <a href="#" data-target="screen-patient-home" class="nav-item">
+              <i data-lucide="layout-dashboard" style="width: 18px; height: 18px;"></i> <span>${t('Dashboard')}</span>
+            </a>
+            <a href="#" data-target="screen-book-appointment" class="nav-item">
+              <i data-lucide="plus-circle" style="width: 18px; height: 18px;"></i> <span>${t('Book Appointment')}</span>
+            </a>
+            <a href="#" data-target="screen-appointments" class="nav-item">
+              <i data-lucide="history" style="width: 18px; height: 18px;"></i> <span>${t('My History')}</span>
+            </a>
+            <a href="#" data-target="screen-settings" class="nav-item">
+              <i data-lucide="user" style="width: 18px; height: 18px;"></i> <span>${t('Profile')}</span>
+            </a>
+        `;
+    } else if (currentUser.role === 'doctor') {
         links = `
             <a href="#" data-target="screen-dashboard" class="nav-item">
               <i data-lucide="layout-grid" style="width: 18px; height: 18px;"></i> <span>${t('Dashboard')}</span>
@@ -249,7 +519,7 @@ function updateSidebarLinks() {
               <i data-lucide="user" style="width: 18px; height: 18px;"></i> <span>${t('My Profile')}</span>
             </a>
         `;
-    } else {
+    } else if (currentUser.role === 'admin') {
         links = `
             <a href="#" data-target="screen-dashboard" class="nav-item">
               <i data-lucide="layout-grid" style="width: 18px; height: 18px;"></i> <span>${t('Dashboard')}</span>
@@ -260,13 +530,22 @@ function updateSidebarLinks() {
             <a href="#" data-target="screen-services" class="nav-item">
               <i data-lucide="stethoscope" style="width: 18px; height: 18px;"></i> <span>${t('Services')}</span>
             </a>
-            <a href="#" data-target="screen-users" class="nav-item">
-              <i data-lucide="users" style="width: 18px; height: 18px;"></i> <span>${t('Users')}</span>
+            <a href="#" data-target="screen-admin-doctors" class="nav-item">
+              <i data-lucide="stethoscope" style="width: 18px; height: 18px;"></i> <span>${t('Doctors')}</span>
+            </a>
+            <a href="#" data-target="screen-admin-patients" class="nav-item">
+              <i data-lucide="users" style="width: 18px; height: 18px;"></i> <span>${t('Patients')}</span>
+            </a>
+            <a href="/admin/specializations" class="nav-item">
+              <i data-lucide="layers" style="width: 18px; height: 18px;"></i> <span>${t('Manage specializations')}</span>
             </a>
             <a href="#" data-target="screen-settings" class="nav-item">
               <i data-lucide="settings" style="width: 18px; height: 18px;"></i> <span>${t('Settings')}</span>
             </a>
         `;
+    } else {
+        sidebarNav.innerHTML = '';
+        return;
     }
 
     sidebarNav.innerHTML = links;
@@ -276,24 +555,29 @@ function updateSidebarLinks() {
 function showDashboard() {
     document.getElementById('screen-login').classList.add('hidden');
     document.getElementById('screen-register').classList.add('hidden');
-    document.getElementById('screen-portal-selection').classList.add('hidden');
     document.getElementById('dashboard-layout').classList.remove('hidden');
-    
+
     updateSidebarLinks();
 
     if (currentUser.role === 'patient') {
         document.body.classList.add('is-patient');
-        document.body.classList.remove('is-doctor');
+        document.body.classList.remove('is-doctor', 'is-admin');
         document.getElementById('patient-welcome-name').textContent = currentUser.name.split(' ')[0];
         document.getElementById('patient-appointments-list').classList.remove('hidden');
         document.getElementById('admin-appointments-table').classList.add('hidden');
-        
+
+        const headerAvatar = document.getElementById('current-user-avatar');
+        if (headerAvatar) {
+            headerAvatar.innerHTML = `<img src="${getGenderedAvatar(currentUser.gender, currentUser.id)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" alt="">`;
+            headerAvatar.classList.add('has-img');
+        }
+
         let target = localStorage.getItem('active_screen') || 'screen-patient-home';
-        if (target === 'screen-dashboard' || target === 'screen-portal-selection') target = 'screen-patient-home';
+        if (target === 'screen-dashboard') target = 'screen-patient-home';
         switchScreen(target);
     } else if (currentUser.role === 'doctor') {
         document.body.classList.add('is-doctor');
-        document.body.classList.remove('is-patient');
+        document.body.classList.remove('is-patient', 'is-admin');
         document.getElementById('dashboard-welcome-text').textContent = `${t('Welcome back, Dr.')} ${currentUser.name}`;
         document.getElementById('patient-appointments-list').classList.add('hidden');
         document.getElementById('admin-appointments-table').classList.remove('hidden');
@@ -305,14 +589,25 @@ function showDashboard() {
         }
         
         let target = localStorage.getItem('active_screen') || 'screen-dashboard';
-        if (target === 'screen-patient-home' || target === 'screen-portal-selection') target = 'screen-dashboard';
+        if (target === 'screen-patient-home') target = 'screen-dashboard';
         switchScreen(target);
-    } else {
+    } else if (currentUser.role === 'admin') {
+        document.body.classList.add('is-admin');
         document.body.classList.remove('is-patient', 'is-doctor');
         document.getElementById('dashboard-welcome-text').textContent = t('Welcome back!');
         document.getElementById('patient-appointments-list').classList.add('hidden');
         document.getElementById('admin-appointments-table').classList.remove('hidden');
-        switchScreen(localStorage.getItem('active_screen') || 'screen-dashboard');
+        let adminTarget = localStorage.getItem('active_screen') || 'screen-dashboard';
+        if (adminTarget === 'screen-users') {
+            adminTarget = 'screen-admin-patients';
+            localStorage.setItem('active_screen', adminTarget);
+        }
+        switchScreen(adminTarget);
+    } else {
+        document.body.classList.remove('is-patient', 'is-doctor', 'is-admin');
+        showToast(t('Unsupported account type'));
+        document.getElementById('form-logout')?.submit();
+        return;
     }
     
     if (currentUser) {
@@ -320,6 +615,9 @@ function showDashboard() {
         
         if (document.getElementById('settings-name')) document.getElementById('settings-name').value = currentUser.name;
         if (document.getElementById('settings-email')) document.getElementById('settings-email').value = currentUser.email;
+        if (document.getElementById('settings-specialty')) {
+            document.getElementById('settings-specialty').value = currentUser.specialty || '';
+        }
         if (document.getElementById('profile-name-title')) document.getElementById('profile-name-title').textContent = currentUser.name;
         if (document.getElementById('profile-role-title')) document.getElementById('profile-role-title').textContent = t(currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1));
         
@@ -329,69 +627,20 @@ function showDashboard() {
             settingsAvatar.innerHTML = `<img src="${avatarImg}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
         }
     }
+
+    startNotificationPolling();
 }
 
-async function handleLogin(e) {
-    e.preventDefault();
-    const email = document.getElementById('login-email').value;
-    const password = document.getElementById('login-password').value;
-    try {
-        const data = await apiFetch('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-        if (data && data.access_token) {
-            token = data.access_token;
-            localStorage.setItem('auth_token', token);
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            currentUser = data.user;
-            localStorage.removeItem('active_screen');
-            showToast(t('Login successful'));
-            setTimeout(() => window.location.reload(), 500);
-        }
-    } catch (err) { alert(`${t('Login failed')}: ` + (err.response?.data?.message || err.message)); }
-}
-
-async function handleRegister(e) {
-    e.preventDefault();
-    const name = document.getElementById('reg-name').value;
-    const email = document.getElementById('reg-email').value;
-    const role = document.getElementById('reg-role').value;
-    const password = document.getElementById('reg-password').value;
-    const password_confirmation = document.getElementById('reg-password-confirm').value;
-    if (password !== password_confirmation) { alert(t('pass_mismatch')); return; }
-    try {
-        const data = await apiFetch('/register', { method: 'POST', body: JSON.stringify({ name, email, role, password, password_confirmation }) });
-        if (data && data.access_token) {
-            token = data.access_token;
-            localStorage.setItem('auth_token', token);
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            currentUser = data.user;
-            localStorage.removeItem('active_screen');
-            showToast(t('Registration successful'));
-            setTimeout(() => window.location.reload(), 500);
-        }
-    } catch (err) { alert(`${t('Registration failed')}: ` + (err.response?.data?.message || err.message)); }
-}
-
-async function logout() {
-    try { await apiFetch('/logout', { method: 'POST' }); }
-    catch (err) { console.error('Logout error:', err); }
-    finally {
-        token = null; currentUser = null;
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('active_screen');
-        delete axios.defaults.headers.common['Authorization'];
-        showLogin();
-        window.location.reload();
-    }
-}
+// Auth submissions are handled by Laravel web forms.
 
 function loadInitialData() {
     if (currentUser && currentUser.role === 'patient') loadPatientHome();
-    else loadDashboardStats();
+    else if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'doctor')) loadDashboardStats();
 }
 
 async function loadPatientHome() {
     try {
-        const appointments = await apiFetch('/appointments');
+        const appointments = Array.isArray(initialData.appointments) ? initialData.appointments : [];
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -420,6 +669,7 @@ async function loadPatientHome() {
         if (!container) return;
         if (upcoming) {
             const formattedTime = upcoming.appointment_time ? upcoming.appointment_time.substring(0, 5) : '';
+            const st = (upcoming.status || 'Pending').toString();
             container.innerHTML = `
                 <div class="patient-next-visit-header">
                     <h3 class="patient-next-visit-title">${t('Your Next Visit')}</h3>
@@ -433,13 +683,16 @@ async function loadPatientHome() {
                         <div class="patient-next-details">
                             <h4>${formatDoctorName(upcoming.doctor?.name)}</h4>
                             <p>
-                                <i data-lucide="stethoscope"></i> ${upcoming.service?.name || t('Consultation')}
+                                <i data-lucide="stethoscope"></i> ${upcoming.service?.name ? serviceNameLabel(upcoming.service.name) : t('Consultation')}
                             </p>
                         </div>
                     </div>
-                    <div class="patient-next-meta">
-                        <p>${formattedTime}</p>
-                        <span class="badge badge-${upcoming.status.toLowerCase()}">${t(upcoming.status)}</span>
+                    <div class="patient-next-aside">
+                        <div class="patient-next-meta">
+                            <p>${formattedTime}</p>
+                            <span class="badge badge-${st.toLowerCase()}">${t(st)}</span>
+                        </div>
+                        <button type="button" class="btn btn-outline patient-cancel-btn patient-cancel-btn--compact" onclick="patientCancelAppointment(${Number(upcoming.id)})">${t('Cancel appointment')}</button>
                     </div>
                 </div>
             `;
@@ -460,7 +713,7 @@ async function loadPatientHome() {
 
 async function loadDashboardStats() {
     try {
-        const stats = await apiFetch('/dashboard/stats');
+        const stats = initialData.dashboardStats;
         if (!stats) return;
         if (document.getElementById('stat-total-today')) document.getElementById('stat-total-today').textContent = stats.total_today;
         if (document.getElementById('stat-total-patients-doctor')) document.getElementById('stat-total-patients-doctor').textContent = stats.total_patients;
@@ -476,32 +729,32 @@ function renderTodayList(appointments) {
     const container = document.getElementById('dashboard-today-list');
     if (!container) return;
     if (!appointments || appointments.length === 0) {
-        container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-body);">${t('No upcoming appointments scheduled.')}</div>`;
+        container.innerHTML = `<div class="staff-schedule-empty">${t('No upcoming appointments scheduled.')}</div>`;
         return;
     }
-    container.innerHTML = appointments.map(app => `
-        <div class="list-item">
+    container.innerHTML = appointments.map(app => {
+        const timeShort = app.appointment_time ? String(app.appointment_time).substring(0, 5) : '';
+        return `
+        <div class="list-item staff-schedule-row">
             <div class="list-item-left">
-                <div class="list-patient-avatar" style="background:#F0F9FF; color:var(--accent);">${app.patient.name[0]}</div>
+                <div class="list-patient-avatar">${app.patient.name[0]}</div>
                 <div>
-                    <div style="font-weight:600; font-size:0.875rem; color:var(--text-main); margin-bottom:0.1rem;">${app.patient.name}</div>
-                    <div style="font-size:0.75rem; color:var(--text-body);">${app.service.name}</div>
+                    <div class="staff-schedule-row__name">${app.patient.name}</div>
+                    <div class="staff-schedule-row__meta">${serviceNameLabel(app.service.name)}</div>
                 </div>
             </div>
-            <div class="list-item-right" style="gap:2rem;">
-                <div style="text-align:right;">
-                    <div style="font-weight:600; font-size:0.875rem; color:var(--text-main);">${app.appointment_time}</div>
-                </div>
-                <span class="badge badge-${app.status.toLowerCase()}">${t(app.status)}</span>
+            <div class="list-item-right staff-schedule-row__right">
+                <div class="staff-schedule-row__time">${timeShort}</div>
+                <span class="badge badge-${app.status.toLowerCase()} staff-schedule-row__badge">${t(app.status)}</span>
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
     lucide.createIcons();
 }
 
 async function loadDoctorPatients() {
     try {
-        const users = await apiFetch('/users/patients');
+        const users = Array.isArray(initialData.doctorPatients) ? initialData.doctorPatients : [];
         const grid = document.getElementById('doctor-patients-grid');
         if (!grid) return;
         
@@ -513,7 +766,6 @@ async function loadDoctorPatients() {
                 <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">${u.name}</h3>
                 <p style="color:var(--text-body); font-size: 0.875rem; margin-bottom: 0.25rem; display:flex; align-items:center; justify-content:center; gap:0.5rem;"><i data-lucide="mail" style="width:14px;"></i> ${u.email}</p>
                 <p style="color:var(--text-body); font-size: 0.875rem; margin-bottom: 1.5rem; display:flex; align-items:center; justify-content:center; gap:0.5rem;"><i data-lucide="phone" style="width:14px;"></i> (555) 123-4567</p>
-                <button class="btn btn-primary w-full" style="background:#1E3A5F; border-color:#1E3A5F;">${t('Contact Patient')}</button>
             </div>
         `).join('');
         lucide.createIcons();
@@ -521,8 +773,17 @@ async function loadDoctorPatients() {
 }
 
 async function loadAppointments(searchQuery = '') {
+    let appointments = [];
     try {
-        const appointments = await apiFetch('/appointments', { params: searchQuery ? { search: searchQuery } : null });
+        appointments = await fetchAppointmentsFromApi(searchQuery);
+        initialData.appointments = appointments;
+    } catch (err) {
+        console.error(err);
+        showToast(firstApiErrorMessage(err));
+        appointments = Array.isArray(initialData.appointments) ? initialData.appointments : [];
+    }
+
+    try {
         const listContainer = document.getElementById('patient-appointments-list');
         const tableContainer = document.getElementById('admin-appointments-table');
         const titleEl = document.getElementById('appointments-title');
@@ -558,7 +819,7 @@ async function loadAppointments(searchQuery = '') {
                     <div class="grid-card patient-history-card">
                         <div class="patient-history-main">
                             <div class="patient-history-top">
-                                <h3>${app.service?.name || t('Unknown')}</h3>
+                                <h3>${app.service?.name ? serviceNameLabel(app.service.name) : t('Unknown')}</h3>
                                 <span class="badge badge-${app.status?.toLowerCase()}">${t(app.status || 'Pending')}</span>
                             </div>
                             <p class="patient-history-doctor">${t('Doctor')}: ${formatDoctorName(app.doctor?.name)}</p>
@@ -567,7 +828,7 @@ async function loadAppointments(searchQuery = '') {
                                 <span><i data-lucide="clock"></i> ${app.appointment_time?.substring(0, 5)}</span>
                             </div>
                         </div>
-                        ${app.status !== 'Cancelled' ? `<button class="btn btn-outline patient-cancel-btn" onclick="deleteAppointment(${app.id})">${t('Cancel')}</button>` : ''}
+                        ${appointmentCanBePatientCancelled(app) ? `<button type="button" class="btn btn-outline patient-cancel-btn" onclick="patientCancelAppointment(${Number(app.id)})">${t('Cancel appointment')}</button>` : ''}
                     </div>
                 `).join('');
             }
@@ -576,8 +837,10 @@ async function loadAppointments(searchQuery = '') {
             if (tableContainer) tableContainer.classList.remove('hidden');
             if (titleEl) titleEl.textContent = t('Appointments');
             if (subtitleEl) subtitleEl.textContent = t('Manage all medical appointments');
-            if (addBtn) addBtn.style.display = 'flex';
-            
+            if (addBtn) {
+                addBtn.style.display = currentUser && currentUser.role === 'admin' ? 'flex' : 'none';
+            }
+
             renderAdminAppointments(appointments);
         }
         lucide.createIcons();
@@ -593,11 +856,13 @@ function renderAdminAppointments(appointments) {
         return `<tr class="table-row">
             <td style="font-weight:600; color:var(--primary);">${app.patient ? app.patient.name : t('Unknown')}</td>
             <td>${formatDoctorName(app.doctor?.name)}</td>
-            <td>${app.service ? app.service.name : t('Unknown')}</td>
+            <td>${app.service ? serviceNameLabel(app.service.name) : t('Unknown')}</td>
             <td>${app.appointment_date} ${t('at')} ${formattedTime}</td>
             <td>
-                <span class="badge badge-${app.status ? app.status.toLowerCase() : ''}">${t(app.status)}</span>
-                ${isConfirmed ? `<span class="badge-email" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; background:#F0F9FF; color:#0369A1; padding:2px 8px; border-radius:100px; margin-left:8px; border:1px solid #BAE6FD;"><i data-lucide="mail" style="width:12px;height:12px;"></i> ${t('Email Sent')}</span>` : ''}
+                <span class="appointment-status-badges">
+                    <span class="badge badge-${app.status ? app.status.toLowerCase() : ''}">${t(app.status)}</span>
+                    ${isConfirmed ? `<span class="badge-email"><i data-lucide="mail" style="width:12px;height:12px;flex-shrink:0;"></i> ${t('Email Sent')}</span>` : ''}
+                </span>
             </td>
             <td class="text-right">
                 <button class="btn-icon" onclick="editAppointment(${app.id})"><i data-lucide="pencil" style="width:16px;"></i></button>
@@ -610,70 +875,153 @@ function renderAdminAppointments(appointments) {
 
 async function loadServices() {
     try {
-        const services = await apiFetch('/services');
+        const services = Array.isArray(initialData.services) ? initialData.services : [];
         const grid = document.getElementById('services-grid');
         if (!grid) return;
         grid.innerHTML = services.map(s => `<div class="grid-card">
             <div class="service-icon-circle"><i data-lucide="stethoscope" style="width:24px;"></i></div>
-            <h3 style="font-size:1.125rem; font-weight:700; margin-bottom:0.75rem; color:var(--primary);">${s.name}</h3>
-            <p style="font-size:0.875rem; color:var(--text-body); line-height:1.5; margin-bottom: 1.5rem;">${s.description}</p>
-            <div style="font-weight: 700; color: var(--accent); font-size: 1.25rem;">${s.price} DH</div>
+            <h3 style="font-size:1.125rem; font-weight:700; margin-bottom:0.75rem; color:var(--primary);">${serviceNameLabel(s.name)}</h3>
+            <p style="font-size:0.875rem; color:var(--text-body); line-height:1.5; margin-bottom: 1.5rem;">${serviceDescriptionLabel(s.description)}</p>
+            <div style="font-weight: 700; color: var(--accent); font-size: 1.25rem;">${servicePriceLabel(s.price)}</div>
         </div>`).join('');
         lucide.createIcons();
     } catch (err) { console.error('Error loading services:', err); }
 }
 
-async function loadUsers() {
-    try {
-        const users = await apiFetch('/users');
-        const grid = document.getElementById('users-grid');
-        if (!grid) return;
-        grid.innerHTML = users.map((u, i) => `<div class="grid-card user-card" style="display:flex; align-items:center; gap:1.5rem; padding: 1.5rem;">
+function doctorSpecialtyLabel(u) {
+    if (u.specialization && u.specialization.name) return u.specialization.name;
+    if (u.specialty && String(u.specialty).trim()) return String(u.specialty).trim();
+    return '';
+}
+
+function adminUserCardHtml(u, i, actionsHtml) {
+    const specLine = doctorSpecialtyLabel(u);
+    return `<div class="grid-card user-card" style="display:flex; align-items:center; gap:1.5rem; padding: 1.5rem;">
             <div class="user-avatar-lg" style="flex-shrink:0;">
                 <img src="${getGenderedAvatar(u.gender, i)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
             </div>
             <div class="user-info">
                 <h3 style="font-size:1.125rem; font-weight:700; color:var(--primary); margin-bottom:0.25rem;">${u.name}</h3>
-                <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:0.25rem;">${t(u.role.charAt(0).toUpperCase() + u.role.slice(1))}</p>
+                ${specLine ? `<p style="color:var(--accent); font-size:0.8rem; font-weight:600; margin-bottom:0.25rem;">${specLine}</p>` : ''}
                 <p style="color:var(--text-body); font-size:0.875rem;">${u.email}</p>
-                
-                <div style="display:flex; gap:0.5rem; margin-top:1.25rem; border-top:1px solid #F1F5F9; padding-top:1rem;">
-                    ${u.role !== 'admin' ? `<button class="btn-icon" style="color:var(--primary);" onclick="updateUserRole(${u.id}, 'admin')" title="${t('Make Admin')}"><i data-lucide="shield" style="width:16px;"></i></button>` : ''}
-                    ${u.role !== 'doctor' ? `<button class="btn-icon" style="color:var(--accent);" onclick="updateUserRole(${u.id}, 'doctor')" title="${t('Make Doctor')}"><i data-lucide="stethoscope" style="width:16px;"></i></button>` : ''}
-                    ${u.role !== 'patient' ? `<button class="btn-icon" style="color:var(--text-body);" onclick="updateUserRole(${u.id}, 'patient')" title="${t('Make Patient')}"><i data-lucide="user" style="width:16px;"></i></button>` : ''}
+                <div style="display:flex; flex-direction:column; gap:0.75rem; margin-top:1.25rem; border-top:1px solid #F1F5F9; padding-top:1rem;">
+                    ${actionsHtml}
                 </div>
             </div>
-        </div>`).join('');
-        lucide.createIcons();
-    } catch (err) { console.error('Error loading users:', err); }
+        </div>`;
 }
 
-async function updateUserRole(userId, newRole) {
-    if (!confirm(t('Are you sure you want to change this user role?'))) return;
+async function loadAdminDoctors() {
     try {
-        await apiFetch(`/users/${userId}/role`, { method: 'PUT', body: JSON.stringify({ role: newRole }) });
-        showToast(t('User role updated successfully'));
-        loadUsers();
-    } catch (err) { alert(`${t('Error')}: ` + (err.response?.data?.message || err.message)); }
+        const doctors = Array.isArray(initialData.adminDoctors) ? initialData.adminDoctors : [];
+        const grid = document.getElementById('admin-doctors-grid');
+        if (!grid) return;
+        if (!doctors.length) {
+            grid.innerHTML = `<div class="grid-card" style="grid-column:1/-1; text-align:center; padding:2rem; color:var(--text-muted);">${t('No doctors found.')}</div>`;
+        } else {
+            const specs = Array.isArray(initialData.specializations) ? initialData.specializations : [];
+            const specOptionsHtml = (selectedId) => specs.map((s) =>
+                `<option value="${s.id}"${Number(selectedId) === Number(s.id) ? ' selected' : ''}>${s.name}</option>`
+            ).join('');
+
+            const grouped = doctors.reduce((acc, doctor) => {
+                const category = doctorSpecialtyLabel(doctor) || t('Not specified');
+                if (!acc[category]) acc[category] = [];
+                acc[category].push(doctor);
+                return acc;
+            }, {});
+
+            const sections = Object.keys(grouped).sort((a, b) => a.localeCompare(b)).map((category) => {
+                const cards = grouped[category].map((u, i) => {
+                    const assignRow = specs.length
+                        ? `<div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+                            <label style="font-size:0.75rem; color:var(--text-muted);">${t('Assign specialization')}</label>
+                            <select id="doctor-spec-${u.id}" class="form-control" style="min-width:11rem; padding:0.35rem 0.5rem;">${specOptionsHtml(u.specialization_id)}</select>
+                            <button type="button" class="btn btn-outline" onclick="saveDoctorSpecialization(${u.id})">${t('Save assignment')}</button>
+                          </div>`
+                        : '';
+                    return adminUserCardHtml(
+                        u,
+                        i,
+                        `<div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+                            <button class="btn btn-outline" onclick="updateUserRole(${u.id}, 'patient')">${t('Revoke Doctor')}</button>
+                         </div>${assignRow}`
+                    );
+                }).join('');
+                return `
+                    <section style="grid-column:1/-1;">
+                        <h3 style="margin:0 0 1rem 0; color:var(--primary); font-size:1.1rem;">${category}</h3>
+                        <div class="grid-view">${cards}</div>
+                    </section>
+                `;
+            });
+
+            grid.innerHTML = sections.join('');
+        }
+        lucide.createIcons();
+    } catch (err) { console.error('Error loading doctors:', err); }
+}
+
+async function loadAdminPatients() {
+    try {
+        const patients = Array.isArray(initialData.adminPatients) ? initialData.adminPatients : [];
+        const grid = document.getElementById('admin-patients-grid');
+        if (!grid) return;
+        if (!patients.length) {
+            grid.innerHTML = `<div class="grid-card" style="grid-column:1/-1; text-align:center; padding:2rem; color:var(--text-muted);">${t('No patients found.')}</div>`;
+        } else {
+            grid.innerHTML = patients.map((u, i) => adminUserCardHtml(u, i,
+                `<button class="btn btn-primary" onclick="updateUserRole(${u.id}, 'doctor')">${t('Approve as Doctor')}</button>`
+            )).join('');
+        }
+        lucide.createIcons();
+    } catch (err) { console.error('Error loading patients:', err); }
+}
+
+function updateUserRole(userId, newRole) {
+    openConfirmModal({
+        title: t('Confirm role change'),
+        message: t('Are you sure you want to change this user role?'),
+        confirmLabel: t('Confirm'),
+        onConfirm: () => submitWebForm(`/users/${userId}/role`, 'PUT', { role: newRole }),
+    });
+}
+
+function saveDoctorSpecialization(userId) {
+    const sel = document.getElementById('doctor-spec-' + userId);
+    if (!sel?.value) {
+        showToast('Select a specialization');
+        return;
+    }
+    submitWebForm(`/users/${userId}/specialization`, 'PUT', { specialization_id: sel.value });
 }
 
 function resetAppointmentModal() {
     if (document.getElementById('appointment-id')) document.getElementById('appointment-id').value = '';
     if (document.getElementById('form-appointment')) document.getElementById('form-appointment').reset();
     if (document.getElementById('appointment-status')) document.getElementById('appointment-status').value = 'Pending';
+    if (document.getElementById('appointment-method')) document.getElementById('appointment-method').value = 'POST';
+    const form = document.getElementById('form-appointment');
+    if (form) form.setAttribute('action', '/appointments');
 }
 
 async function prepareAppointmentModal() {
     try {
-        const patients = await apiFetch('/users/patients');
-        const doctors = await apiFetch('/users/doctors');
-        const services = await apiFetch('/services');
+        const patients = Array.isArray(initialData.modalPatients) ? initialData.modalPatients : [];
+        const doctors = Array.isArray(initialData.doctors) ? initialData.doctors : [];
+        const services = Array.isArray(initialData.services) ? initialData.services : [];
         const patientSelect = document.getElementById('select-patient');
         const doctorSelect = document.getElementById('select-doctor');
         const serviceSelect = document.getElementById('select-service');
         if (patientSelect) patientSelect.innerHTML = `<option value="">${t('Select a patient...')}</option>` + patients.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-        if (doctorSelect) doctorSelect.innerHTML = `<option value="">${t('Select a doctor...')}</option>` + doctors.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-        if (serviceSelect) serviceSelect.innerHTML = `<option value="">${t('Select a service...')}</option>` + services.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        if (doctorSelect) {
+            doctorSelect.innerHTML = `<option value="">${t('Select a doctor...')}</option>` + doctors.map((d) => {
+                const spec = doctorSpecialtyLabel(d);
+                const suffix = spec ? ` — ${spec}` : '';
+                return `<option value="${d.id}">${d.name}${suffix}</option>`;
+            }).join('');
+        }
+        if (serviceSelect) serviceSelect.innerHTML = `<option value="">${t('Select a service...')}</option>` + services.map(s => `<option value="${s.id}">${serviceNameLabel(s.name)}</option>`).join('');
 
         if (currentUser) {
             if (currentUser.role === 'patient' && patientSelect) {
@@ -689,7 +1037,7 @@ async function prepareAppointmentModal() {
 
 async function editAppointment(id) {
     try {
-        const app = await apiFetch(`/appointments/${id}`);
+        const app = (Array.isArray(initialData.appointments) ? initialData.appointments : []).find(a => Number(a.id) === Number(id));
         if (!app) return;
         if (document.getElementById('appointment-id')) document.getElementById('appointment-id').value = app.id;
         await prepareAppointmentModal();
@@ -699,42 +1047,67 @@ async function editAppointment(id) {
         if (document.getElementById('appointment-date')) document.getElementById('appointment-date').value = app.appointment_date;
         if (document.getElementById('appointment-time')) document.getElementById('appointment-time').value = app.appointment_time;
         if (document.getElementById('appointment-status')) document.getElementById('appointment-status').value = app.status;
+        const form = document.getElementById('form-appointment');
+        const methodInput = document.getElementById('appointment-method');
+        if (form) form.setAttribute('action', `/appointments/${app.id}`);
+        if (methodInput) methodInput.value = 'PUT';
         document.getElementById('modal-appointment').classList.add('active');
     } catch (err) { console.error('Error loading appointment for edit:', err); }
 }
 
-async function handleSaveAppointment(e) {
-    e.preventDefault();
-    const id = document.getElementById('appointment-id').value;
-    const payload = {
-        patient_id: document.getElementById('select-patient').value,
-        doctor_id: document.getElementById('select-doctor').value,
-        service_id: document.getElementById('select-service').value,
-        appointment_date: document.getElementById('appointment-date').value,
-        appointment_time: document.getElementById('appointment-time').value,
-        status: document.getElementById('appointment-status').value
-    };
-    const method = id ? 'PUT' : 'POST';
-    const endpoint = id ? `/appointments/${id}` : '/appointments';
-    try {
-        await apiFetch(endpoint, { method, body: JSON.stringify(payload) });
-        document.getElementById('modal-appointment').classList.remove('active');
-        showToast(t('Appointment saved successfully'));
-        if (currentUser && currentUser.role === 'patient') loadPatientHome();
-        if (!document.getElementById('screen-appointments-content').classList.contains('hidden')) loadAppointments();
-        loadDashboardStats();
-    } catch (err) { alert('Error saving appointment: ' + (err.response?.data?.message || err.message)); }
+function deleteAppointment(id) {
+    openConfirmModal({
+        title: t('Delete this appointment'),
+        message: t('Are you sure you want to delete this?'),
+        confirmLabel: t('Delete'),
+        danger: true,
+        onConfirm: () => submitWebForm(`/appointments/${id}`, 'DELETE'),
+    });
 }
 
-async function deleteAppointment(id) {
-    if (!confirm(t('Are you sure you want to delete this?'))) return;
+function patientCancelAppointment(id) {
+    if (!currentUser || currentUser.role !== 'patient') return;
+    openConfirmModal({
+        title: t('Cancel appointment'),
+        message: t('Cancel this appointment?'),
+        confirmLabel: t('Confirm cancellation'),
+        danger: true,
+        onConfirm: () => executePatientCancelAppointment(id),
+    });
+}
+
+async function executePatientCancelAppointment(id) {
     try {
-        await apiFetch(`/appointments/${id}`, { method: 'DELETE' });
-        showToast(t('Appointment deleted'));
-        loadAppointments();
-        if (currentUser && currentUser.role === 'patient') loadPatientHome();
-        loadDashboardStats();
-    } catch (err) { alert('Error deleting appointment: ' + (err.response?.data?.message || err.message)); }
+        const response = await axios({
+            method: 'PUT',
+            url: `/appointments/${id}`,
+            data: { status: 'Cancelled' },
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            },
+            withCredentials: true,
+            validateStatus: (status) => status >= 200 && status < 300,
+        });
+        const data = response.data;
+        if (data && typeof data === 'object' && data.id) {
+            const list = Array.isArray(initialData.appointments) ? initialData.appointments : [];
+            const idx = list.findIndex((a) => Number(a.id) === Number(id));
+            if (idx !== -1) list[idx] = { ...list[idx], ...data };
+            else list.unshift(data);
+            initialData.appointments = list;
+        }
+        showToast(t('Appointment cancelled successfully.'));
+        loadPatientHome();
+        const searchInput = document.getElementById('search-appointments');
+        await loadAppointments(searchInput ? searchInput.value : '');
+        refreshNotificationsFromServer();
+    } catch (err) {
+        console.error(err);
+        showToast(firstApiErrorMessage(err));
+    }
 }
 
 function bookingPrevStep(step) {
@@ -859,7 +1232,7 @@ async function loadBookingTimeSlots() {
         bookingBookedTimes = [];
     } else {
         try {
-            const availability = await apiFetch('/appointments/availability', {
+            const availability = await webSessionJson('/web-api/appointments/availability', {
                 params: {
                     doctor_id: bookingData.doctorId,
                     appointment_date: bookingData.date,
@@ -903,49 +1276,96 @@ function checkStep3Completion() {
     nextBtn.classList.toggle('hidden', !canContinue);
 }
 
-async function handleConfirmBooking() {
-    const confirmBtn = document.getElementById('btn-confirm-booking');
-    const feedback = document.getElementById('booking-confirmation-feedback');
-    const originalBtnText = confirmBtn ? confirmBtn.innerHTML : '';
+function bookingAppointmentTimePayload(time) {
+    if (!time) return '';
+    const s = String(time).trim();
+    return s.length === 5 && /^\d{2}:\d{2}$/.test(s) ? `${s}:00` : s;
+}
 
-    if (confirmBtn) {
-        confirmBtn.disabled = true;
-        confirmBtn.style.opacity = '0.7';
-        confirmBtn.textContent = t('Confirming...');
+function firstApiErrorMessage(err) {
+    const d = err.response?.data;
+    if (!d) return err.message || t('Error');
+    if (typeof d.message === 'string') return d.message;
+    if (d.errors && typeof d.errors === 'object') {
+        const first = Object.values(d.errors)[0];
+        return Array.isArray(first) ? first[0] : String(first);
     }
-    if (feedback) feedback.classList.add('hidden');
+    return t('Error');
+}
 
+/** Fixed thin green bar at top of viewport (not clipped by main-content overflow). */
+function showBookingOperationSuccessStrip(message) {
+    const text = String(message || '').trim() || t('Operation completed successfully');
+    const bar = document.createElement('div');
+    bar.className = 'booking-operation-success-strip';
+    bar.setAttribute('role', 'status');
+    bar.setAttribute('aria-live', 'polite');
+    bar.textContent = text;
+    document.body.appendChild(bar);
+    requestAnimationFrame(() => bar.classList.add('booking-operation-success-strip--visible'));
+    window.setTimeout(() => {
+        bar.classList.remove('booking-operation-success-strip--visible');
+        window.setTimeout(() => bar.remove(), 350);
+    }, 5500);
+}
+
+async function handleConfirmBooking() {
+    const feedback = document.querySelector('#screen-book-appointment-content #booking-confirmation-feedback');
+    const feedbackText = document.querySelector('#screen-book-appointment-content #booking-confirmation-feedback-text');
+    const btn = document.getElementById('btn-confirm-booking');
+    if (!currentUser || !bookingData.doctorId || !bookingData.serviceId || !bookingData.date || !bookingData.time) {
+        return;
+    }
+    if (feedback) {
+        feedback.classList.add('hidden');
+        feedback.style.removeProperty('display');
+    }
+    if (btn) btn.disabled = true;
+    const successMsg = t('Operation completed successfully');
     try {
-        await apiFetch('/appointments', {
+        const response = await axios({
             method: 'POST',
-            body: JSON.stringify({
+            url: '/appointments',
+            baseURL: '',
+            data: {
                 patient_id: currentUser.id,
                 doctor_id: bookingData.doctorId,
                 service_id: bookingData.serviceId,
                 appointment_date: bookingData.date,
-                appointment_time: bookingData.time,
-                status: 'Pending'
-            })
+                appointment_time: bookingAppointmentTimePayload(bookingData.time),
+                status: 'Pending',
+            },
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            },
+            withCredentials: true,
+            validateStatus: (status) => status >= 200 && status < 300,
         });
-        showToast(t('Appointment booked successfully!'));
+        const data = response.data;
+        if (data && typeof data === 'object' && data.id) {
+            if (!Array.isArray(initialData.appointments)) initialData.appointments = [];
+            initialData.appointments.unshift(data);
+            bookingBookedTimes = Array.from(new Set([...bookingBookedTimes, bookingData.time]));
+        }
+        showBookingOperationSuccessStrip(successMsg);
+        if (feedbackText) feedbackText.textContent = successMsg;
         if (feedback) {
             feedback.classList.remove('hidden');
+            feedback.style.setProperty('display', 'flex', 'important');
             lucide.createIcons();
+            feedback.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-        setTimeout(() => {
-            switchScreen('screen-patient-home');
-            loadPatientHome();
-        }, 1200);
-    } catch (err) { 
-        alert('Error booking appointment: ' + (err.response?.data?.message || err.message)); 
-        console.error('Booking Error:', err.response?.data || err);
+        loadPatientHome();
+        refreshNotificationsFromServer();
+    } catch (err) {
+        console.error(err);
+        const msg = firstApiErrorMessage(err);
+        showToast(msg);
     } finally {
-        if (confirmBtn) {
-            confirmBtn.disabled = false;
-            confirmBtn.style.opacity = '1';
-            confirmBtn.innerHTML = originalBtnText || t('Confirm Booking');
-            lucide.createIcons();
-        }
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -958,23 +1378,30 @@ async function initBookingProcess() {
 
 async function loadBookingServices() {
     try {
-        const services = await apiFetch('/services');
+        const services = Array.isArray(initialData.services) ? initialData.services : [];
         const grid = document.getElementById('booking-service-grid');
         if (!grid) return;
-        grid.innerHTML = services.map(s => `
-            <div class="select-card ${bookingData.serviceId == s.id ? 'active' : ''}" onclick="selectBookingService(${s.id}, '${s.name}')">
+        grid.innerHTML = services.map((s) => {
+            const title = serviceNameLabel(s.name);
+            return `
+            <div class="select-card ${bookingData.serviceId == s.id ? 'active' : ''}" onclick="selectBookingService(${Number(s.id)})">
                 <div class="select-card-icon"><i data-lucide="stethoscope"></i></div>
-                <div class="select-card-title">${s.name}</div>
-                <div class="select-card-subtitle">${s.price} DH</div>
+                <div class="select-card-title">${title}</div>
+                <div class="select-card-subtitle">${servicePriceLabel(s.price)}</div>
             </div>
-        `).join('');
+        `;
+        }).join('');
         lucide.createIcons();
     } catch (err) { console.error(err); }
 }
 
-function selectBookingService(id, name) {
+function selectBookingService(id) {
     bookingData.serviceId = id;
-    document.getElementById('confirm-service').textContent = name;
+    const services = Array.isArray(initialData.services) ? initialData.services : [];
+    const s = services.find((x) => Number(x.id) === Number(id));
+    const name = s ? serviceNameLabel(s.name) : '';
+    const confirmEl = document.getElementById('confirm-service');
+    if (confirmEl) confirmEl.textContent = name;
     loadBookingServices(); // Refresh active state
     setTimeout(() => bookingNextStep(2), 300); // Auto-advance for better UX
 }
@@ -982,10 +1409,13 @@ function selectBookingService(id, name) {
 async function loadBookingDoctors() {
     try {
         const params = bookingData.serviceId ? { service_id: bookingData.serviceId } : null;
-        const doctors = await apiFetch('/users/doctors', { params });
+        const doctorsRaw = await webSessionJson('/web-api/users/doctors', { params });
+        const doctors = Array.isArray(doctorsRaw) ? doctorsRaw : [];
         const grid = document.getElementById('booking-doctor-grid');
         if (!grid) return;
+        bookingDoctorNameById = Object.fromEntries(doctors.map((d) => [String(d.id), d.name]));
         if (!doctors.length) {
+            bookingDoctorNameById = {};
             grid.innerHTML = `
                 <div class="grid-card" style="grid-column: 1 / -1; text-align:center; padding:2rem; color:var(--text-body);">
                     ${t('No doctors available for this specialty yet.')}
@@ -993,20 +1423,43 @@ async function loadBookingDoctors() {
             `;
             return;
         }
-        grid.innerHTML = doctors.map(d => `
-            <div class="select-card ${bookingData.doctorId == d.id ? 'active' : ''}" onclick="selectBookingDoctor(${d.id}, '${d.name}')">
+        const categoryFor = (d) => {
+            if (d.specialization && d.specialization.name) return d.specialization.name;
+            if (d.specialty && String(d.specialty).trim()) return String(d.specialty).trim();
+            return t('Not specified');
+        };
+        const grouped = doctors.reduce((acc, d) => {
+            const k = categoryFor(d);
+            if (!acc[k]) acc[k] = [];
+            acc[k].push(d);
+            return acc;
+        }, {});
+        const sections = Object.keys(grouped).sort((a, b) => a.localeCompare(b)).map((title) => {
+            const cards = grouped[title].map((d) => `
+            <div class="select-card ${bookingData.doctorId == d.id ? 'active' : ''}" onclick="selectBookingDoctor(${Number(d.id)})">
                 <div class="user-avatar" style="width:64px; height:64px;">${d.name.charAt(0)}</div>
                 <div class="select-card-title">${formatDoctorName(d.name)}</div>
                 <div class="select-card-subtitle">${t('Available Today')}</div>
-            </div>
-        `).join('');
+            </div>`).join('');
+            return `
+            <section style="margin-bottom:2rem;">
+                <h3 style="margin:0 0 1rem 0; color:var(--primary); font-size:1.1rem; font-weight:700;">${title}</h3>
+                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">${cards}</div>
+            </section>`;
+        });
+        grid.innerHTML = sections.join('');
         lucide.createIcons();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+        bookingDoctorNameById = {};
+        console.error(err);
+    }
 }
 
-function selectBookingDoctor(id, name) {
+function selectBookingDoctor(id) {
     bookingData.doctorId = id;
-    document.getElementById('confirm-doctor').textContent = formatDoctorName(name);
+    const name = bookingDoctorNameById[String(id)] || '';
+    const confirmEl = document.getElementById('confirm-doctor');
+    if (confirmEl) confirmEl.textContent = formatDoctorName(name);
     loadBookingDoctors();
     setTimeout(() => bookingNextStep(3), 300);
 }
@@ -1025,6 +1478,11 @@ function bookingNextStep(step) {
     if (step === 4) {
         document.getElementById('confirm-date').textContent = bookingData.date;
         document.getElementById('confirm-time').textContent = bookingData.time;
+        const fb = document.querySelector('#screen-book-appointment-content #booking-confirmation-feedback');
+        if (fb) {
+            fb.classList.add('hidden');
+            fb.style.removeProperty('display');
+        }
     }
 }
 
@@ -1033,7 +1491,9 @@ function showToast(message) {
     if (!container) return;
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `<i data-lucide="check-circle" class="toast-icon"></i><div class="toast-message">${t(message)}</div>`;
+    toast.innerHTML = '<i data-lucide="check-circle" class="toast-icon"></i><div class="toast-message"></div>';
+    const msgEl = toast.querySelector('.toast-message');
+    if (msgEl) msgEl.textContent = t(message);
     container.appendChild(toast); lucide.createIcons();
     setTimeout(() => toast.classList.add('show'), 100);
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);

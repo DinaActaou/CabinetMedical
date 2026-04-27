@@ -20,11 +20,24 @@ class AppointmentFactory extends Factory
     public function definition(): array
     {
         return [
-            'patient_id' => User::where('role', 'patient')->inRandomOrder()->first()?->id ?? User::factory()->state(['role' => 'patient']),
-            'doctor_id' => User::where('role', 'doctor')->inRandomOrder()->first()?->id ?? User::factory()->state(['role' => 'doctor']),
-            'service_id' => Service::inRandomOrder()->first()?->id ?? Service::factory(),
+            'patient_id' => fn () => User::query()
+                ->where('role', 'patient')
+                ->inRandomOrder()
+                ->value('id')
+                ?? User::factory()->demoPatient()->create()->id,
+            'doctor_id' => fn () => User::query()
+                ->where('role', 'doctor')
+                ->where('status', 'approved')
+                ->inRandomOrder()
+                ->value('id')
+                ?? User::factory()->create([
+                    'role' => 'doctor',
+                    'status' => 'approved',
+                ])->id,
+            'service_id' => fn () => Service::query()->inRandomOrder()->value('id')
+                ?? Service::factory()->create()->id,
             'appointment_date' => fake()->dateTimeBetween('now', '+30 days')->format('Y-m-d'),
-            'appointment_time' => sprintf('%02d:%02d', rand(8, 16), rand(0, 59)),
+            'appointment_time' => sprintf('%02d:%02d:00', random_int(8, 16), random_int(0, 59)),
             'status' => fake()->randomElement(['pending', 'confirmed', 'cancelled']),
             'notes' => fake()->optional()->sentence(),
         ];

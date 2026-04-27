@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Notifications\UserRegisteredNotification;
+use App\Services\AdminNotifier;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -16,17 +18,25 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|string|in:patient,doctor',
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role,
+            'role' => 'patient',
+            'status' => 'pending',
         ]);
 
+        AdminNotifier::notify(new UserRegisteredNotification($user));
+
         Auth::login($user);
+        $request->session()->regenerate();
+
+        if (! $request->expectsJson()) {
+            return redirect('/')->with('success', __('Registration successful'));
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -52,6 +62,12 @@ class AuthController extends Controller
         }
 
         Auth::login($user);
+        $request->session()->regenerate();
+
+        if (! $request->expectsJson()) {
+            return redirect('/')->with('success', __('Login successful'));
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -63,7 +79,16 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
-        return response()->json(['message' => 'Déconnecté avec succès']);
+        if ($request->expectsJson()) {
+            $request->user()->currentAccessToken()?->delete();
+
+            return response()->json(['message' => 'Déconnecté avec succès']);
+        }
+
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/')->with('success', __('Logged out successfully'));
     }
 }

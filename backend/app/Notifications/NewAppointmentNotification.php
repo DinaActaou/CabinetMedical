@@ -10,40 +10,31 @@ class NewAppointmentNotification extends Notification
 {
     use Queueable;
 
-    protected $appointment;
+    public function __construct(public Appointment $appointment) {}
 
-    /**
-     * Create a new notification instance.
-     */
-    public function __construct(Appointment $appointment)
-    {
-        $this->appointment = $appointment;
-    }
-
-    /**
-     * Get the notification's delivery channels.
-     *
-     * @return array<int, string>
-     */
     public function via(object $notifiable): array
     {
         return ['database'];
     }
 
-    /**
-     * Get the array representation of the notification.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(object $notifiable): array
     {
+        $this->appointment->loadMissing(['patient', 'doctor', 'service']);
+
         return [
-            'title' => 'Nouveau rendez-vous',
-            'message' => "Un nouveau rendez-vous a été pris par {$this->appointment->patient->name}",
+            'type' => 'admin_new_booking',
+            'title' => __('New appointment'),
+            'message' => __(':patient booked with :doctor — :service on :date at :time.', [
+                'patient' => $this->appointment->patient?->name ?? __('Unknown'),
+                'doctor' => $this->appointment->doctor?->name ?? __('Unknown'),
+                'service' => $this->appointment->service?->name ?? __('Unknown'),
+                'date' => (string) $this->appointment->appointment_date,
+                'time' => substr((string) $this->appointment->appointment_time, 0, 5),
+            ]),
             'appointment_id' => $this->appointment->id,
-            'patient_name' => $this->appointment->patient->name,
-            'doctor_name' => $this->appointment->doctor->name,
-            'service_name' => $this->appointment->service->name,
+            'patient_name' => $this->appointment->patient?->name,
+            'doctor_name' => $this->appointment->doctor?->name,
+            'service_name' => $this->appointment->service?->name,
             'date' => $this->appointment->appointment_date,
             'time' => $this->appointment->appointment_time,
         ];

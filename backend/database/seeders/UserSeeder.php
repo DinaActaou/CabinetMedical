@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Specialization;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -22,11 +23,11 @@ class UserSeeder extends Seeder
         ];
 
         $doctors = [
-            ['name' => 'Dr. Karim Benali', 'email' => 'doctor@medibook.com'], // Using the specific email here
-            ['name' => 'Dr. Sara Moussaoui', 'email' => 'sara@example.com'],
-            ['name' => 'Dr. Hassan Idrissi', 'email' => 'hassan@example.com'],
-            ['name' => 'Dr. Leila Fassi', 'email' => 'leila@example.com'],
-            ['name' => 'Dr. Mehdi Squalli', 'email' => 'mehdi@example.com'],
+            ['name' => 'Dr. Karim Benali', 'email' => 'doctor@medibook.com', 'specialty' => 'Cardiology'],
+            ['name' => 'Dr. Sara Moussaoui', 'email' => 'sara@example.com', 'specialty' => 'Pediatrics'],
+            ['name' => 'Dr. Hassan Idrissi', 'email' => 'hassan@example.com', 'specialty' => 'Dermatology'],
+            ['name' => 'Dr. Leila Fassi', 'email' => 'leila@example.com', 'specialty' => 'General Medicine'],
+            ['name' => 'Dr. Mehdi Squalli', 'email' => 'mehdi@example.com', 'specialty' => 'Neurology'],
         ];
 
         // Seed 5 Patients
@@ -36,17 +37,22 @@ class UserSeeder extends Seeder
                 'email' => $data['email'],
                 'password' => Hash::make('password'),
                 'role' => 'patient',
+                'status' => 'pending',
                 'email_verified_at' => now(),
             ]);
         }
 
         // Seed 5 Doctors
         foreach ($doctors as $data) {
+            $spec = Specialization::where('name', $data['specialty'])->first();
             User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
                 'password' => Hash::make('password'),
                 'role' => 'doctor',
+                'status' => 'approved',
+                'specialty' => $data['specialty'],
+                'specialization_id' => $spec?->id,
                 'email_verified_at' => now(),
             ]);
         }
@@ -57,7 +63,14 @@ class UserSeeder extends Seeder
             'email' => 'admin@medibook.com',
             'password' => Hash::make('password'),
             'role' => 'admin',
+            'status' => 'approved',
             'email_verified_at' => now(),
         ]);
+
+        // Données de démo supplémentaires via factory (≥10 utilisateurs au total ; comptes de connexion = seed explicite ci-dessus)
+        User::factory()
+            ->count(5)
+            ->demoPatient()
+            ->create();
     }
 }
