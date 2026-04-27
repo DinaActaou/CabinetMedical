@@ -1,6 +1,6 @@
 # MediBook / Cabinet médical
 
-Application web de gestion des rendez-vous (Laravel). Le projet applicatif se trouve dans le dossier **`backend/`**.
+Application web de gestion des rendez-vous (Laravel). Le projet applicatif se trouve dans le dossier **`backend/`**
 
 ## Prérequis
 - PHP ^8.3 (voir `backend/composer.json`)
@@ -42,8 +42,8 @@ Mot de passe pour tous les comptes ci-dessous : **`password`**
 ### Sans authentification
 - `POST /api/login` — connexion
 - `POST /api/register` — inscription (patient)
-- `GET /api/external/appointments` — liste des rendez-vous (intégration externe)
-- `POST /api/external/appointments` — création d’un rendez-vous (intégration externe)
+- `GET /api/external/appointments` — liste des rendez-vous 
+- `POST /api/external/appointments` — création d’un rendez-vous 
 
 ### Authentifié — rôles patient, médecin ou admin
 
