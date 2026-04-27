@@ -8,15 +8,18 @@
   </div>
   
   <div class="header-right">
-    <nav class="patient-nav" style="display:none; gap: 1rem; align-items:center; margin-right: 2rem;">
+    <nav class="patient-nav" style="display:none; gap: 0.75rem; align-items:center; margin-right: 2rem;">
       <a href="#" class="nav-item active" data-target="screen-patient-home" style="display:flex; align-items:center; gap:0.5rem; padding: 0.5rem 1rem; border-radius: 8px;">
-        <i data-lucide="home"></i> {{ __('Home') }}
+        <i data-lucide="layout-dashboard" style="width:18px;"></i> {{ __('Dashboard') }}
+      </a>
+      <a href="#" class="nav-item" data-target="screen-book-appointment" style="display:flex; align-items:center; gap:0.5rem; padding: 0.5rem 1rem; border-radius: 8px;">
+        <i data-lucide="plus-circle" style="width:18px;"></i> {{ __('Book Appointment') }}
       </a>
       <a href="#" class="nav-item" data-target="screen-appointments" style="display:flex; align-items:center; gap:0.5rem; padding: 0.5rem 1rem; border-radius: 8px;">
-        <i data-lucide="calendar"></i> {{ __('Appointments') }}
+        <i data-lucide="history" style="width:18px;"></i> {{ __('My History') }}
       </a>
       <a href="#" class="nav-item" data-target="screen-settings" style="display:flex; align-items:center; gap:0.5rem; padding: 0.5rem 1rem; border-radius: 8px;">
-        <i data-lucide="user"></i> {{ __('Profile') }}
+        <i data-lucide="user" style="width:18px;"></i> {{ __('Profile') }}
       </a>
     </nav>
 
@@ -59,6 +62,11 @@
     <div class="user-profile">
       <div class="avatar" id="current-user-avatar">??</div>
       <div class="user-name" id="current-user-name">Loading...</div>
+      
+      <!-- Patient-only Logout Button -->
+      <button id="btn-logout-patient" class="patient-only btn-icon" style="margin-left: 1rem; color: var(--danger); display: none;" title="{{ __('Logout') }}">
+        <i data-lucide="log-out" style="width:18px; height:18px;"></i>
+      </button>
     </div>
   </div>
 </header>

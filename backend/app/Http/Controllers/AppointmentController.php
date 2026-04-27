@@ -8,9 +8,30 @@ use App\Mail\AppointmentConfirmation;
 use App\Notifications\NewAppointmentNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 
 class AppointmentController extends Controller
 {
+    public function availability(Request $request)
+    {
+        $validated = $request->validate([
+            'doctor_id' => 'required|exists:users,id',
+            'appointment_date' => 'required|date',
+        ]);
+
+        $bookedTimes = Appointment::where('doctor_id', $validated['doctor_id'])
+            ->whereDate('appointment_date', $validated['appointment_date'])
+            ->where('status', '!=', 'Cancelled')
+            ->orderBy('appointment_time')
+            ->pluck('appointment_time')
+            ->map(fn ($time) => substr((string) $time, 0, 5))
+            ->values();
+
+        return response()->json([
+            'booked_times' => $bookedTimes,
+        ]);
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -55,6 +76,18 @@ class AppointmentController extends Controller
             'status' => 'nullable|string'
         ]);
 
+        $hasConflict = Appointment::where('doctor_id', $validated['doctor_id'])
+            ->whereDate('appointment_date', $validated['appointment_date'])
+            ->where('appointment_time', $validated['appointment_time'])
+            ->where('status', '!=', 'Cancelled')
+            ->exists();
+
+        if ($hasConflict) {
+            throw ValidationException::withMessages([
+                'appointment_time' => __('This doctor already has an appointment at this date and time.')
+            ]);
+        }
+
         $appointment = Appointment::create($validated);
 
         // 1. Load relationships
@@ -70,9 +103,8 @@ class AppointmentController extends Controller
             $admin->notify(new NewAppointmentNotification($appointment));
         }
 
-        // 4. Redirect with success flash
-        return redirect()->route('appointments.index')
-            ->with('success', __('messages.appointment_created'));
+        // 4. Return JSON response
+        return response()->json($appointment, 201);
     }
 
     public function show(Appointment $appointment)
@@ -91,6 +123,26 @@ class AppointmentController extends Controller
             'notes' => 'nullable|string',
             'status' => 'nullable|string'
         ]);
+
+        $doctorId = $validated['doctor_id'] ?? $appointment->doctor_id;
+        $date = $validated['appointment_date'] ?? $appointment->appointment_date;
+        $time = $validated['appointment_time'] ?? $appointment->appointment_time;
+        $status = $validated['status'] ?? $appointment->status;
+
+        if ($status !== 'Cancelled') {
+            $hasConflict = Appointment::where('doctor_id', $doctorId)
+                ->whereDate('appointment_date', $date)
+                ->where('appointment_time', $time)
+                ->where('status', '!=', 'Cancelled')
+                ->where('id', '!=', $appointment->id)
+                ->exists();
+
+            if ($hasConflict) {
+                throw ValidationException::withMessages([
+                    'appointment_time' => __('This doctor already has an appointment at this date and time.')
+                ]);
+            }
+        }
 
         $oldStatus = $appointment->status;
         $appointment->update($validated);

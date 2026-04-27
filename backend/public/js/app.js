@@ -5,6 +5,8 @@ const API_BASE_URL = '/api';
 let currentUser = null;
 let token = localStorage.getItem('auth_token');
 let currentLang = (document.documentElement.lang || 'en').substring(0, 2);
+let bookingCalendarCursor = null;
+let bookingBookedTimes = [];
 
 // Booking State
 let bookingData = { serviceId: null, doctorId: null, date: null, time: null };
@@ -56,6 +58,12 @@ function getGenderedAvatar(gender, index) {
     const type = (gender === 'female' || gender === 'girl') ? 'women' : 'men';
     const id = type === 'women' ? (index + 20) : (index + 30);
     return `https://randomuser.me/api/portraits/med/${type}/${id}.jpg`;
+}
+
+function formatDoctorName(name) {
+    if (!name) return t('Unknown');
+    const cleanName = String(name).replace(/^dr\.?\s*/i, '').trim();
+    return `Dr. ${cleanName || t('Unknown')}`;
 }
 
 document.addEventListener('DOMContentLoaded', init);
@@ -113,7 +121,7 @@ function setupEventListeners() {
     });
 
     document.addEventListener('click', (e) => {
-        if (e.target.closest('#btn-logout') || e.target.closest('#btn-logout-header')) logout();
+        if (e.target.closest('#btn-logout') || e.target.closest('#btn-logout-header') || e.target.closest('#btn-logout-patient')) logout();
     });
 
     document.querySelectorAll('[data-modal]').forEach(btn => {
@@ -338,7 +346,7 @@ async function handleLogin(e) {
             showToast(t('Login successful'));
             setTimeout(() => window.location.reload(), 500);
         }
-    } catch (err) { alert('Login failed: ' + (err.response?.data?.message || err.message)); }
+    } catch (err) { alert(`${t('Login failed')}: ` + (err.response?.data?.message || err.message)); }
 }
 
 async function handleRegister(e) {
@@ -360,7 +368,7 @@ async function handleRegister(e) {
             showToast(t('Registration successful'));
             setTimeout(() => window.location.reload(), 500);
         }
-    } catch (err) { alert('Registration failed: ' + (err.response?.data?.message || err.message)); }
+    } catch (err) { alert(`${t('Registration failed')}: ` + (err.response?.data?.message || err.message)); }
 }
 
 async function logout() {
@@ -384,34 +392,67 @@ function loadInitialData() {
 async function loadPatientHome() {
     try {
         const appointments = await apiFetch('/appointments');
-        const upcoming = appointments.filter(a => a.status === 'Confirmed' || a.status === 'Pending')
-            .sort((a, b) => new Date(a.appointment_date) - new Date(b.appointment_date))[0];
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const upcoming = appointments
+            .filter(a => {
+                const normalizedStatus = (a.status || '').toString().trim().toLowerCase();
+                const isCancelled = ['cancelled', 'canceled', 'annulé', 'annule'].includes(normalizedStatus);
+                if (isCancelled) return false;
+
+                const dateTimeStr = `${a.appointment_date}T${a.appointment_time || '23:59:59'}`;
+                const appointmentDateTime = new Date(dateTimeStr);
+                if (!isNaN(appointmentDateTime.getTime())) {
+                    return appointmentDateTime >= now;
+                }
+
+                // Safe fallback if time is missing/unparseable
+                const appointmentDate = new Date(a.appointment_date);
+                return !isNaN(appointmentDate.getTime()) && appointmentDate >= todayStart;
+            })
+            .sort((a, b) => {
+                const aDate = new Date(`${a.appointment_date}T${a.appointment_time || '23:59:59'}`).getTime();
+                const bDate = new Date(`${b.appointment_date}T${b.appointment_time || '23:59:59'}`).getTime();
+                return aDate - bDate;
+            })[0];
         const container = document.getElementById('upcoming-appointment-container');
         if (!container) return;
         if (upcoming) {
+            const formattedTime = upcoming.appointment_time ? upcoming.appointment_time.substring(0, 5) : '';
             container.innerHTML = `
-                <h2 style="font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--primary); font-weight: 600;">${t('Upcoming Appointment')}</h2>
-                <div class="grid-card" style="padding: 2rem; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
-                            <h3 style="font-size: 1.25rem; font-weight: 700;">${upcoming.service.name}</h3>
-                            <span class="badge badge-${upcoming.status.toLowerCase()}">${t(upcoming.status)}</span>
+                <div class="patient-next-visit-header">
+                    <h3 class="patient-next-visit-title">${t('Your Next Visit')}</h3>
+                </div>
+                <div class="grid-card patient-next-card">
+                    <div class="patient-next-main">
+                        <div class="patient-next-date">
+                            <span class="patient-next-date-month">${upcoming.appointment_date.split('-')[1]}</span>
+                            <span class="patient-next-date-day">${upcoming.appointment_date.split('-')[2]}</span>
                         </div>
-                        <p style="color:var(--text-body); margin-bottom:1rem;">${t('with Dr.')} ${upcoming.doctor.name}</p>
-                        <div style="display:flex; gap:1.5rem; color:var(--text-muted); font-size:0.875rem;">
-                            <span><i data-lucide="calendar" style="width:16px;"></i> ${upcoming.appointment_date}</span>
-                            <span><i data-lucide="clock" style="width:16px;"></i> ${upcoming.appointment_time}</span>
+                        <div class="patient-next-details">
+                            <h4>${formatDoctorName(upcoming.doctor?.name)}</h4>
+                            <p>
+                                <i data-lucide="stethoscope"></i> ${upcoming.service?.name || t('Consultation')}
+                            </p>
                         </div>
                     </div>
-                    <button class="btn btn-primary" onclick="switchScreen('screen-appointments')">${t('View Details')}</button>
+                    <div class="patient-next-meta">
+                        <p>${formattedTime}</p>
+                        <span class="badge badge-${upcoming.status.toLowerCase()}">${t(upcoming.status)}</span>
+                    </div>
                 </div>
             `;
         } else {
-            container.innerHTML = `<div class="grid-card" style="padding: 3rem; text-align: center; color: var(--text-muted);">
-                <i data-lucide="calendar" style="width:48px; height:48px; margin-bottom:1rem; opacity:0.5;"></i>
-                <p>${t('No upcoming appointments scheduled.')}</p>
-                <button class="btn btn-outline mt-4" onclick="switchScreen('screen-book-appointment')">${t('Book your first appointment')}</button>
-            </div>`;
+            container.innerHTML = `
+                <div class="grid-card patient-empty-card">
+                    <div class="patient-empty-icon">
+                        <i data-lucide="calendar"></i>
+                    </div>
+                    <h3>${t('No upcoming appointments')}</h3>
+                    <p>${t('Book your first session to get started.')}</p>
+                </div>
+            `;
         }
         lucide.createIcons();
     } catch (err) { console.error('Error loading patient home:', err); }
@@ -482,48 +523,90 @@ async function loadDoctorPatients() {
 async function loadAppointments(searchQuery = '') {
     try {
         const appointments = await apiFetch('/appointments', { params: searchQuery ? { search: searchQuery } : null });
+        const listContainer = document.getElementById('patient-appointments-list');
+        const tableContainer = document.getElementById('admin-appointments-table');
+        const titleEl = document.getElementById('appointments-title');
+        const subtitleEl = document.getElementById('appointments-subtitle');
+        const addBtn = document.querySelector('[data-modal="modal-appointment"]');
+
         if (currentUser && currentUser.role === 'patient') {
-            const container = document.getElementById('patient-appointments-list');
-            if (!container) return;
-            if (appointments.length === 0) {
-                container.innerHTML = `<div class="grid-card" style="padding:4rem; text-align:center; color:var(--text-muted);">${t('No upcoming appointments scheduled.')}</div>`;
-                return;
-            }
-            container.innerHTML = appointments.map(app => `
-                <div class="grid-card" style="padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.5rem;">
-                            <h3 style="font-size: 1.125rem; font-weight: 700;">${app.service.name}</h3>
-                            <span class="badge badge-${app.status.toLowerCase()}">${t(app.status)}</span>
+            if (listContainer) listContainer.classList.remove('hidden');
+            if (tableContainer) tableContainer.classList.add('hidden');
+            if (titleEl) titleEl.textContent = t('My History');
+            if (subtitleEl) subtitleEl.textContent = t('View your past and upcoming medical visits');
+            if (addBtn) addBtn.style.display = 'none';
+
+            if (!listContainer) return;
+            const sortedAppointments = [...appointments].sort((a, b) => {
+                const aCreatedAt = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const bCreatedAt = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+                if (aCreatedAt !== bCreatedAt) {
+                    return bCreatedAt - aCreatedAt;
+                }
+
+                // Fallback if created_at is missing/equal
+                const aDateTime = new Date(`${a.appointment_date}T${a.appointment_time || '00:00:00'}`).getTime();
+                const bDateTime = new Date(`${b.appointment_date}T${b.appointment_time || '00:00:00'}`).getTime();
+                return bDateTime - aDateTime;
+            });
+
+            if (sortedAppointments.length === 0) {
+                listContainer.innerHTML = `<div class="grid-card patient-history-empty">${t('No appointments found.')}</div>`;
+            } else {
+                listContainer.innerHTML = sortedAppointments.map(app => `
+                    <div class="grid-card patient-history-card">
+                        <div class="patient-history-main">
+                            <div class="patient-history-top">
+                                <h3>${app.service?.name || t('Unknown')}</h3>
+                                <span class="badge badge-${app.status?.toLowerCase()}">${t(app.status || 'Pending')}</span>
+                            </div>
+                            <p class="patient-history-doctor">${t('Doctor')}: ${formatDoctorName(app.doctor?.name)}</p>
+                            <div class="patient-history-meta">
+                                <span><i data-lucide="calendar"></i> ${app.appointment_date}</span>
+                                <span><i data-lucide="clock"></i> ${app.appointment_time?.substring(0, 5)}</span>
+                            </div>
                         </div>
-                        <p style="color:var(--text-body); margin-bottom:0.75rem;">${t('Doctor')}: ${app.doctor.name}</p>
-                        <div style="display:flex; gap:1.5rem; color:var(--text-muted); font-size:0.875rem;">
-                            <span><i data-lucide="calendar" style="width:16px;"></i> ${app.appointment_date}</span>
-                            <span><i data-lucide="clock" style="width:16px;"></i> ${app.appointment_time}</span>
-                        </div>
+                        ${app.status !== 'Cancelled' ? `<button class="btn btn-outline patient-cancel-btn" onclick="deleteAppointment(${app.id})">${t('Cancel')}</button>` : ''}
                     </div>
-                    ${app.status !== 'Cancelled' ? `<button class="btn btn-outline" style="color:var(--danger); border-color:var(--danger);" onclick="deleteAppointment(${app.id})">${t('Cancel')}</button>` : ''}
-                </div>
-            `).join('');
-            lucide.createIcons();
+                `).join('');
+            }
         } else {
-            const tbody = document.getElementById('tbody-appointments');
-            if (!tbody) return;
-            tbody.innerHTML = appointments.map(app => `<tr class="table-row">
-                <td style="font-weight:600; color:var(--primary);">${app.patient.name}</td>
-                <td>Dr. ${app.doctor.name}</td>
-                <td>${app.service.name}</td>
-                <td>${app.appointment_date} at ${app.appointment_time}</td>
-                <td><span class="badge badge-${app.status.toLowerCase()}">${t(app.status)}</span></td>
-                <td class="text-right">
-                    <button class="btn-icon" onclick="editAppointment(${app.id})"><i data-lucide="pencil" style="width:16px;"></i></button>
-                    <button class="btn-icon delete" onclick="deleteAppointment(${app.id})"><i data-lucide="trash-2" style="width:16px;"></i></button>
-                </td>
-            </tr>`).join('');
-            lucide.createIcons();
+            if (listContainer) listContainer.classList.add('hidden');
+            if (tableContainer) tableContainer.classList.remove('hidden');
+            if (titleEl) titleEl.textContent = t('Appointments');
+            if (subtitleEl) subtitleEl.textContent = t('Manage all medical appointments');
+            if (addBtn) addBtn.style.display = 'flex';
+            
+            renderAdminAppointments(appointments);
         }
+        lucide.createIcons();
     } catch (err) { console.error('Error loading appointments:', err); }
 }
+
+function renderAdminAppointments(appointments) {
+    const tbody = document.getElementById('tbody-appointments');
+    if (!tbody) return;
+    tbody.innerHTML = appointments.map(app => {
+        const formattedTime = app.appointment_time ? app.appointment_time.substring(0, 5) : '';
+        const isConfirmed = app.status && app.status.toLowerCase() === 'confirmed';
+        return `<tr class="table-row">
+            <td style="font-weight:600; color:var(--primary);">${app.patient ? app.patient.name : t('Unknown')}</td>
+            <td>${formatDoctorName(app.doctor?.name)}</td>
+            <td>${app.service ? app.service.name : t('Unknown')}</td>
+            <td>${app.appointment_date} ${t('at')} ${formattedTime}</td>
+            <td>
+                <span class="badge badge-${app.status ? app.status.toLowerCase() : ''}">${t(app.status)}</span>
+                ${isConfirmed ? `<span class="badge-email" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; background:#F0F9FF; color:#0369A1; padding:2px 8px; border-radius:100px; margin-left:8px; border:1px solid #BAE6FD;"><i data-lucide="mail" style="width:12px;height:12px;"></i> ${t('Email Sent')}</span>` : ''}
+            </td>
+            <td class="text-right">
+                <button class="btn-icon" onclick="editAppointment(${app.id})"><i data-lucide="pencil" style="width:16px;"></i></button>
+                <button class="btn-icon delete" onclick="deleteAppointment(${app.id})"><i data-lucide="trash-2" style="width:16px;"></i></button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
 
 async function loadServices() {
     try {
@@ -553,10 +636,25 @@ async function loadUsers() {
                 <h3 style="font-size:1.125rem; font-weight:700; color:var(--primary); margin-bottom:0.25rem;">${u.name}</h3>
                 <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:0.25rem;">${t(u.role.charAt(0).toUpperCase() + u.role.slice(1))}</p>
                 <p style="color:var(--text-body); font-size:0.875rem;">${u.email}</p>
+                
+                <div style="display:flex; gap:0.5rem; margin-top:1.25rem; border-top:1px solid #F1F5F9; padding-top:1rem;">
+                    ${u.role !== 'admin' ? `<button class="btn-icon" style="color:var(--primary);" onclick="updateUserRole(${u.id}, 'admin')" title="${t('Make Admin')}"><i data-lucide="shield" style="width:16px;"></i></button>` : ''}
+                    ${u.role !== 'doctor' ? `<button class="btn-icon" style="color:var(--accent);" onclick="updateUserRole(${u.id}, 'doctor')" title="${t('Make Doctor')}"><i data-lucide="stethoscope" style="width:16px;"></i></button>` : ''}
+                    ${u.role !== 'patient' ? `<button class="btn-icon" style="color:var(--text-body);" onclick="updateUserRole(${u.id}, 'patient')" title="${t('Make Patient')}"><i data-lucide="user" style="width:16px;"></i></button>` : ''}
+                </div>
             </div>
         </div>`).join('');
         lucide.createIcons();
     } catch (err) { console.error('Error loading users:', err); }
+}
+
+async function updateUserRole(userId, newRole) {
+    if (!confirm(t('Are you sure you want to change this user role?'))) return;
+    try {
+        await apiFetch(`/users/${userId}/role`, { method: 'PUT', body: JSON.stringify({ role: newRole }) });
+        showToast(t('User role updated successfully'));
+        loadUsers();
+    } catch (err) { alert(`${t('Error')}: ` + (err.response?.data?.message || err.message)); }
 }
 
 function resetAppointmentModal() {
@@ -639,68 +737,295 @@ async function deleteAppointment(id) {
     } catch (err) { alert('Error deleting appointment: ' + (err.response?.data?.message || err.message)); }
 }
 
-async function initBookingProcess() {
-    bookingData = { serviceId: null, doctorId: null, date: null, time: null };
-    bookingPrevStep(1);
-    const services = await apiFetch('/services');
-    if (document.getElementById('booking-select-service')) document.getElementById('booking-select-service').innerHTML = `<option value="">${t('Choose a service')}</option>` + services.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-    const doctors = await apiFetch('/users/doctors');
-    const list = document.getElementById('booking-doctor-list');
-    if (list) list.innerHTML = doctors.map((d, i) => `
-        <div class="doctor-selection-card" onclick="selectBookingDoctor(${d.id}, '${d.name}', '${t('General Medicine')}')">
-            <div style="display:flex; align-items:center; gap:1rem;">
-                <img src="${getGenderedAvatar(d.gender, i)}" style="width:48px; height:48px; border-radius:50%; object-fit:cover; background:#F1F5F9;">
-                <div>
-                    <div style="font-weight:700; color:var(--primary);">Dr. ${d.name}</div>
-                    <div style="font-size:0.875rem; color:var(--text-body);">${t('General Medicine')}</div>
-                </div>
-            </div>
-            <i data-lucide="check-circle" class="check-icon"></i>
-        </div>
-    `).join('');
-    lucide.createIcons();
-    const calendar = document.getElementById('booking-calendar');
-    if (calendar) calendar.innerHTML = `<div style="display:grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; text-align:center;">
-        <div style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${t('Sun')}</div><div style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${t('Mon')}</div><div style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${t('Tue')}</div><div style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${t('Wed')}</div><div style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${t('Thu')}</div><div style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${t('Fri')}</div><div style="font-weight:600; font-size:0.75rem; color:var(--text-muted);">${t('Sat')}</div>
-        ${Array.from({length: 30}, (_, i) => `<div class="time-slot" onclick="selectBookingDate('2026-04-${(i+1)<10?'0'+(i+1):(i+1)}', this)">${i+1}</div>`).join('')}
-    </div>`;
-    const times = ['9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM', '4:00 PM', '4:30 PM', '5:00 PM'];
-    if (document.getElementById('booking-time-slots')) document.getElementById('booking-time-slots').innerHTML = times.map(t => `<div class="time-slot" onclick="selectBookingTime('${t}', this)">${t}</div>`).join('');
+function bookingPrevStep(step) {
+    bookingNextStep(step);
 }
 
-function selectBookingDoctor(id, name, spec) { bookingData.doctorId = id; bookingData.doctorName = name; bookingData.doctorSpecialty = spec; document.querySelectorAll('.doctor-selection-card').forEach(c => c.classList.remove('selected')); event.currentTarget.classList.add('selected'); }
-function selectBookingDate(date, el) { bookingData.date = date; document.querySelectorAll('#booking-calendar .time-slot').forEach(s => s.classList.remove('selected')); el.classList.add('selected'); }
-function selectBookingTime(time, el) { bookingData.time = time; document.querySelectorAll('#booking-time-slots .time-slot').forEach(s => s.classList.remove('selected')); el.classList.add('selected'); }
+function formatLocalDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function getMonthStart(day) {
+    return new Date(day.getFullYear(), day.getMonth(), 1);
+}
+
+function getWeekdayMondayIndex(date) {
+    // Convert JS Sunday-based (0..6) to Monday-based (0..6)
+    return (date.getDay() + 6) % 7;
+}
+
+function changeBookingMonth(offset) {
+    if (!bookingCalendarCursor) {
+        bookingCalendarCursor = getMonthStart(new Date());
+    }
+
+    const next = new Date(bookingCalendarCursor.getFullYear(), bookingCalendarCursor.getMonth() + offset, 1);
+    const currentMonthStart = getMonthStart(new Date());
+
+    // Do not navigate to months before current month
+    if (next < currentMonthStart) return;
+    bookingCalendarCursor = next;
+    initBookingCalendar();
+}
+
+function initBookingCalendar() {
+    const container = document.getElementById('booking-calendar');
+    if (!container) return;
+
+    const today = new Date();
+    const todayAtMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (!bookingCalendarCursor) {
+        bookingCalendarCursor = bookingData.date ? getMonthStart(new Date(bookingData.date)) : getMonthStart(today);
+    }
+
+    const visibleYear = bookingCalendarCursor.getFullYear();
+    const visibleMonth = bookingCalendarCursor.getMonth();
+    const firstOfMonth = new Date(visibleYear, visibleMonth, 1);
+    const daysInMonth = new Date(visibleYear, visibleMonth + 1, 0).getDate();
+    const leadingBlanks = getWeekdayMondayIndex(firstOfMonth);
+    const currentMonthStart = getMonthStart(todayAtMidnight);
+    const isPrevDisabled = bookingCalendarCursor <= currentMonthStart;
+
+    const monthLabel = new Intl.DateTimeFormat(currentLang, { month: 'long', year: 'numeric' }).format(firstOfMonth);
+    const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        .map((_, idx) => {
+            const refDate = new Date(2024, 0, idx + 1); // Monday-first reference week
+            return new Intl.DateTimeFormat(currentLang, { weekday: 'short' }).format(refDate);
+        });
+
+    let html = `
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.85rem;">
+            <button type="button" class="btn btn-outline" onclick="changeBookingMonth(-1)" ${isPrevDisabled ? 'disabled' : ''} style="padding:0.4rem 0.65rem; ${isPrevDisabled ? 'opacity:0.45; cursor:not-allowed;' : ''}">
+                <i data-lucide="chevron-left" style="width:14px; height:14px;"></i>
+            </button>
+            <strong style="color:var(--primary); text-transform: capitalize;">${monthLabel}</strong>
+            <button type="button" class="btn btn-outline" onclick="changeBookingMonth(1)" style="padding:0.4rem 0.65rem;">
+                <i data-lucide="chevron-right" style="width:14px; height:14px;"></i>
+            </button>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align:center;">
+    `;
+
+    weekdayLabels.forEach(label => {
+        html += `<div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); padding:5px 0;">${label}</div>`;
+    });
+
+    for (let i = 0; i < leadingBlanks; i++) {
+        html += `<div style="height:40px;"></div>`;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const cellDate = new Date(visibleYear, visibleMonth, day);
+        const dateStr = formatLocalDate(cellDate);
+        const isPast = cellDate < todayAtMidnight;
+        const isActive = bookingData.date === dateStr;
+
+        html += `
+            <button
+                type="button"
+                class="day-btn booking-date-btn ${isActive ? 'active' : ''}"
+                onclick="${isPast ? '' : `selectBookingDate('${dateStr}')`}"
+                ${isPast ? 'disabled' : ''}
+                style="padding:9px 5px; width:100%; ${isPast ? 'opacity:0.35; cursor:not-allowed;' : ''}"
+            >
+                ${day}
+            </button>
+        `;
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+    lucide.createIcons();
+    loadBookingTimeSlots();
+}
+
+function selectBookingDate(date) {
+    bookingData.date = date;
+    bookingData.time = null;
+    bookingCalendarCursor = getMonthStart(new Date(date));
+    initBookingCalendar();
+    checkStep3Completion();
+}
+
+async function loadBookingTimeSlots() {
+    const container = document.getElementById('booking-time-slots');
+    if (!container) return;
+
+    if (!bookingData.date || !bookingData.doctorId) {
+        bookingBookedTimes = [];
+    } else {
+        try {
+            const availability = await apiFetch('/appointments/availability', {
+                params: {
+                    doctor_id: bookingData.doctorId,
+                    appointment_date: bookingData.date,
+                }
+            });
+            bookingBookedTimes = Array.isArray(availability?.booked_times) ? availability.booked_times : [];
+        } catch (err) {
+            bookingBookedTimes = [];
+            console.error('Failed to load appointment availability:', err);
+        }
+    }
+
+    const slots = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
+    if (bookingData.time && bookingBookedTimes.includes(bookingData.time)) {
+        bookingData.time = null;
+    }
+    container.innerHTML = slots.map(s => `
+        <button
+            class="day-btn booking-time-btn ${bookingData.time === s ? 'active' : ''} ${bookingBookedTimes.includes(s) ? 'booked' : ''}"
+            onclick="${bookingBookedTimes.includes(s) ? '' : `selectBookingTime('${s}')`}"
+            ${bookingBookedTimes.includes(s) ? 'disabled' : ''}
+            title="${bookingBookedTimes.includes(s) ? t('Already booked') : ''}"
+        >
+            ${s}${bookingBookedTimes.includes(s) ? ` - ${t('Booked')}` : ''}
+        </button>
+    `).join('');
+    checkStep3Completion();
+}
+
+function selectBookingTime(time) {
+    bookingData.time = time;
+    loadBookingTimeSlots();
+    checkStep3Completion();
+}
+
+function checkStep3Completion() {
+    const nextBtn = document.getElementById('btn-to-step-4');
+    if (!nextBtn) return;
+    const isBooked = bookingData.time && bookingBookedTimes.includes(bookingData.time);
+    const canContinue = bookingData.date && bookingData.time && !isBooked;
+    nextBtn.classList.toggle('hidden', !canContinue);
+}
+
+async function handleConfirmBooking() {
+    const confirmBtn = document.getElementById('btn-confirm-booking');
+    const feedback = document.getElementById('booking-confirmation-feedback');
+    const originalBtnText = confirmBtn ? confirmBtn.innerHTML : '';
+
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = '0.7';
+        confirmBtn.textContent = t('Confirming...');
+    }
+    if (feedback) feedback.classList.add('hidden');
+
+    try {
+        await apiFetch('/appointments', {
+            method: 'POST',
+            body: JSON.stringify({
+                patient_id: currentUser.id,
+                doctor_id: bookingData.doctorId,
+                service_id: bookingData.serviceId,
+                appointment_date: bookingData.date,
+                appointment_time: bookingData.time,
+                status: 'Pending'
+            })
+        });
+        showToast(t('Appointment booked successfully!'));
+        if (feedback) {
+            feedback.classList.remove('hidden');
+            lucide.createIcons();
+        }
+        setTimeout(() => {
+            switchScreen('screen-patient-home');
+            loadPatientHome();
+        }, 1200);
+    } catch (err) { 
+        alert('Error booking appointment: ' + (err.response?.data?.message || err.message)); 
+        console.error('Booking Error:', err.response?.data || err);
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.style.opacity = '1';
+            confirmBtn.innerHTML = originalBtnText || t('Confirm Booking');
+            lucide.createIcons();
+        }
+    }
+}
+
+async function initBookingProcess() {
+    bookingData = { serviceId: null, doctorId: null, date: null, time: null };
+    bookingCalendarCursor = null;
+    bookingBookedTimes = [];
+    bookingNextStep(1);
+}
+
+async function loadBookingServices() {
+    try {
+        const services = await apiFetch('/services');
+        const grid = document.getElementById('booking-service-grid');
+        if (!grid) return;
+        grid.innerHTML = services.map(s => `
+            <div class="select-card ${bookingData.serviceId == s.id ? 'active' : ''}" onclick="selectBookingService(${s.id}, '${s.name}')">
+                <div class="select-card-icon"><i data-lucide="stethoscope"></i></div>
+                <div class="select-card-title">${s.name}</div>
+                <div class="select-card-subtitle">${s.price} DH</div>
+            </div>
+        `).join('');
+        lucide.createIcons();
+    } catch (err) { console.error(err); }
+}
+
+function selectBookingService(id, name) {
+    bookingData.serviceId = id;
+    document.getElementById('confirm-service').textContent = name;
+    loadBookingServices(); // Refresh active state
+    setTimeout(() => bookingNextStep(2), 300); // Auto-advance for better UX
+}
+
+async function loadBookingDoctors() {
+    try {
+        const params = bookingData.serviceId ? { service_id: bookingData.serviceId } : null;
+        const doctors = await apiFetch('/users/doctors', { params });
+        const grid = document.getElementById('booking-doctor-grid');
+        if (!grid) return;
+        if (!doctors.length) {
+            grid.innerHTML = `
+                <div class="grid-card" style="grid-column: 1 / -1; text-align:center; padding:2rem; color:var(--text-body);">
+                    ${t('No doctors available for this specialty yet.')}
+                </div>
+            `;
+            return;
+        }
+        grid.innerHTML = doctors.map(d => `
+            <div class="select-card ${bookingData.doctorId == d.id ? 'active' : ''}" onclick="selectBookingDoctor(${d.id}, '${d.name}')">
+                <div class="user-avatar" style="width:64px; height:64px;">${d.name.charAt(0)}</div>
+                <div class="select-card-title">${formatDoctorName(d.name)}</div>
+                <div class="select-card-subtitle">${t('Available Today')}</div>
+            </div>
+        `).join('');
+        lucide.createIcons();
+    } catch (err) { console.error(err); }
+}
+
+function selectBookingDoctor(id, name) {
+    bookingData.doctorId = id;
+    document.getElementById('confirm-doctor').textContent = formatDoctorName(name);
+    loadBookingDoctors();
+    setTimeout(() => bookingNextStep(3), 300);
+}
 
 function bookingNextStep(step) {
-    if (step === 2) {
-        const select = document.getElementById('booking-select-service');
-        bookingData.serviceId = select.value;
-        bookingData.serviceName = select.options[select.selectedIndex].text;
-        if (!bookingData.serviceId) { alert(t('Please select a service')); return; }
-    }
-    if (step === 3) {
-        if (!bookingData.doctorId || !bookingData.date || !bookingData.time) { alert(t('Please select doctor, date and time')); return; }
-        document.getElementById('confirm-service').textContent = bookingData.serviceName;
-        document.getElementById('confirm-doctor').textContent = `Dr. ${bookingData.doctorName} - ${bookingData.doctorSpecialty}`;
+    document.querySelectorAll('.booking-step').forEach(s => s.classList.add('hidden'));
+    document.getElementById(`booking-step-${step}`).classList.remove('hidden');
+    
+    document.querySelectorAll('.step-circle').forEach((dot, idx) => {
+        dot.classList.toggle('active', idx + 1 <= step);
+    });
+
+    if (step === 1) loadBookingServices();
+    if (step === 2) loadBookingDoctors();
+    if (step === 3) initBookingCalendar();
+    if (step === 4) {
         document.getElementById('confirm-date').textContent = bookingData.date;
         document.getElementById('confirm-time').textContent = bookingData.time;
     }
-    document.querySelectorAll('.booking-step').forEach(s => s.classList.add('hidden'));
-    document.getElementById(`booking-step-${step}`).classList.remove('hidden');
-    document.querySelectorAll('.step-circle').forEach((c, i) => c.classList.toggle('active', (i + 1) <= step));
-}
-
-function bookingPrevStep(step) {
-    document.querySelectorAll('.booking-step').forEach(s => s.classList.add('hidden'));
-    document.getElementById(`booking-step-${step}`).classList.remove('hidden');
-    document.querySelectorAll('.step-circle').forEach((c, i) => c.classList.toggle('active', (i + 1) <= step));
-}
-
-async function confirmBooking() {
-    const payload = { patient_id: currentUser.id, doctor_id: bookingData.doctorId, service_id: bookingData.serviceId, appointment_date: bookingData.date, appointment_time: bookingData.time, status: 'Pending' };
-    try { await apiFetch('/appointments', { method: 'POST', body: JSON.stringify(payload) }); showToast(t('Appointment saved successfully')); switchScreen('screen-appointments'); }
-    catch (err) { alert('Error booking appointment: ' + (err.response?.data?.message || err.message)); }
 }
 
 function showToast(message) {

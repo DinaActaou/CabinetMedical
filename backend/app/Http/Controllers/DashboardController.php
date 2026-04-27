@@ -16,18 +16,16 @@ class DashboardController extends Controller
         $user = $request->user();
         
         $query = Appointment::query();
-        if ($user->role === 'doctor') {
-            $query->where('doctor_id', $user->id);
-        }
+        // Since roles are merged, doctors see everything just like admins
+        // But if they are only "doctor", we could still filter if you want, 
+        // but the user said "combine privileges", so we show everything.
 
         $stats = [
             'total_today' => (clone $query)->whereDate('appointment_date', $today)->count(),
             'pending' => (clone $query)->where('status', 'Pending')->count(),
             'confirmed' => (clone $query)->where('status', 'Confirmed')->whereDate('appointment_date', '>=', $today)->count(),
             'cancelled' => (clone $query)->where('status', 'Cancelled')->count(),
-            'total_patients' => $user->role === 'doctor' 
-                ? (clone $query)->distinct('patient_id')->count('patient_id')
-                : User::where('role', 'patient')->count(),
+            'total_patients' => User::where('role', 'patient')->count(),
             'active_doctors' => User::where('role', 'doctor')->count(),
             'today_appointments' => $query->with(['patient', 'doctor', 'service'])
                 ->whereDate('appointment_date', $today)
