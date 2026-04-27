@@ -3,9 +3,9 @@
 Application web de gestion des rendez-vous.Le projet applicatif se trouve dans le dossier **`backend/`**
 
 ## Prérequis
-- PHP ^8.3 (voir `backend/composer.json`)
+- PHP ^8.3 
 - Composer
-- MySQL (ou MariaDB compatible)
+- MySQL
 ## Installation après clonage
 ```bash
 git clone https://github.com/DinaActaou/CabinetMedical.git
