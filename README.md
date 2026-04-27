@@ -1,6 +1,6 @@
 # MediBook / Cabinet médical
 
-Application web de gestion des rendez-vous (Laravel). Le projet applicatif se trouve dans le dossier **`backend/`**
+Application web de gestion des rendez-vous.Le projet applicatif se trouve dans le dossier **`backend/`**
 
 ## Prérequis
 - PHP ^8.3 (voir `backend/composer.json`)
