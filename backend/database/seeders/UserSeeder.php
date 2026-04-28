@@ -9,9 +9,6 @@ use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         $patients = [
@@ -30,7 +27,6 @@ class UserSeeder extends Seeder
             ['name' => 'Dr. Mehdi Squalli', 'email' => 'mehdi@example.com', 'specialty' => 'Neurology'],
         ];
 
-        // Seed 5 Patients
         foreach ($patients as $data) {
             User::create([
                 'name' => $data['name'],
@@ -56,8 +52,6 @@ class UserSeeder extends Seeder
                 'email_verified_at' => now(),
             ]);
         }
-
-        // Seed 1 Admin
         User::create([
             'name' => 'Administrateur MediBook',
             'email' => 'admin@medibook.com',
@@ -67,7 +61,6 @@ class UserSeeder extends Seeder
             'email_verified_at' => now(),
         ]);
 
-        // Données de démo supplémentaires via factory (≥10 utilisateurs au total ; comptes de connexion = seed explicite ci-dessus)
         User::factory()
             ->count(5)
             ->demoPatient()

@@ -1,9 +1,9 @@
-// === MOCK DATA ===
+
 const mockUsers = [
-  { initials: 'JM', name: 'Dr. Jean Martin', role: 'Cardiologist', email: 'jean.martin@medical.com', phone: '+33 1 23 45 67 89' },
-  { initials: 'SB', name: 'Dr. Sophie Bernard', role: 'General Practitioner', email: 'sophie.bernard@medical.com', phone: '+33 1 23 45 67 90' },
-  { initials: 'CL', name: 'Dr. Claire Leroy', role: 'Orthopedic Surgeon', email: 'claire.leroy@medical.com', phone: '+33 1 23 45 67 91' },
-  { initials: 'MD', name: 'Dr. Marc Dubois', role: 'Pediatrician', email: 'marc.dubois@medical.com', phone: '+33 1 23 45 67 92' }
+  { initials: 'JM', name: 'Dr. Ayman', role: 'Cardiologist', email: 'ayman@medical.com', phone: '+212 6 23 45 67 89' },
+  { initials: 'SB', name: 'Dr. Sami', role: 'General Practitioner', email: 'sami@medical.com', phone: '+212 6 23 45 67 90' },
+  { initials: 'CL', name: 'Dr. Lina', role: 'Orthopedic Surgeon', email: 'lina@medical.com', phone: '+212 6 23 45 67 91' },
+  { initials: 'MD', name: 'Dr. Chada', role: 'Pediatrician', email: 'chada@medical.com', phone: '+212 6 23 45 67 92' }
 ];
 
 const mockServices = [
@@ -25,20 +25,17 @@ const mockAppointments = [
   { patient: 'Emma Bernard', doc: 'Dr. Sophie Bernard', service: 'Pediatrics', date: '2026-04-24', time: '15:30 PM', status: 'Confirmed', badge: 'success' }
 ];
 
-// === APP LOGIC ===
 document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
   
-  // Navigation
+ 
   document.querySelectorAll('.nav-item').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
-      
-      // Update active state
+    
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       link.classList.add('active');
       
-      // Show Target Screen
       const target = link.getAttribute('data-target');
       if (target) {
         document.querySelectorAll('.dashboard-page').forEach(page => page.classList.add('hidden'));
@@ -47,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Modal triggers
+
   document.querySelectorAll('[data-modal]').forEach(btn => {
     btn.addEventListener('click', () => {
       const modalId = btn.getAttribute('data-modal');
@@ -61,12 +58,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Day buttons toggle
+
   document.querySelectorAll('.day-btn').forEach(btn => {
     btn.addEventListener('click', () => btn.classList.toggle('active'));
   });
 
-  // Render Data
+  
   renderDashboardList();
   renderAppointmentsTable();
   renderServices();

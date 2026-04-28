@@ -8,15 +8,8 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-/**
- * Ensures every specialization has at least one approved doctor (patient booking never empty).
- * Safe to run multiple times (updateOrCreate by email).
- */
 class EnsureDoctorsForSpecializationsSeeder extends Seeder
 {
-    /**
-     * Human-readable names for fill-in doctors (one per English specialization label).
-     */
     private static function doctorDisplayName(string $specName): string
     {
         return match ($specName) {
@@ -60,7 +53,7 @@ class EnsureDoctorsForSpecializationsSeeder extends Seeder
             );
         }
 
-        // Fix names for existing fill-doctor accounts (e.g. after upgrading from "(demo)" labels)
+
         foreach (Specialization::orderBy('id')->get() as $spec) {
             $slug = Str::slug($spec->name) ?: 'spec';
             $email = "fill-doctor-{$spec->id}-{$slug}@medibook.test";

@@ -7,9 +7,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Link each bookable service to a medical specialization so patients only see matching doctors.
-     */
     public function up(): void
     {
         Schema::table('services', function (Blueprint $table) {

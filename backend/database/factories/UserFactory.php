@@ -12,9 +12,7 @@ use Illuminate\Support\Str;
  */
 class UserFactory extends Factory
 {
-    /**
-     * The current password being used by the factory.
-     */
+   
     protected static ?string $password;
 
     /**
@@ -53,8 +51,6 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
-
-    /** Patient approuvé pour démo / RDV (factory + seeder). */
     public function demoPatient(): static
     {
         return $this->state(fn (array $attributes) => [

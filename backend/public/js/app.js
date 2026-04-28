@@ -1,7 +1,4 @@
-// === API CONFIG ===
 const API_BASE_URL = '/api';
-
-// === STATE ===
 let currentUser = null;
 let currentLang = (document.documentElement.lang || 'en').substring(0, 2);
 let bookingCalendarCursor = null;
@@ -11,9 +8,7 @@ let notificationPollTimer = null;
 /** @type {null | (() => void)} */
 let confirmModalCallback = null;
 
-// Booking State
 let bookingData = { serviceId: null, doctorId: null, date: null, time: null };
-/** Doctor id → display name for booking cards (avoid broken inline onclick with quotes). */
 let bookingDoctorNameById = {};
 
 // === AXIOS CONFIG ===
@@ -631,7 +626,6 @@ function showDashboard() {
     startNotificationPolling();
 }
 
-// Auth submissions are handled by Laravel web forms.
 
 function loadInitialData() {
     if (currentUser && currentUser.role === 'patient') loadPatientHome();
@@ -656,7 +650,7 @@ async function loadPatientHome() {
                     return appointmentDateTime >= now;
                 }
 
-                // Safe fallback if time is missing/unparseable
+               
                 const appointmentDate = new Date(a.appointment_date);
                 return !isNaN(appointmentDate.getTime()) && appointmentDate >= todayStart;
             })
@@ -1126,7 +1120,6 @@ function getMonthStart(day) {
 }
 
 function getWeekdayMondayIndex(date) {
-    // Convert JS Sunday-based (0..6) to Monday-based (0..6)
     return (date.getDay() + 6) % 7;
 }
 
@@ -1138,7 +1131,6 @@ function changeBookingMonth(offset) {
     const next = new Date(bookingCalendarCursor.getFullYear(), bookingCalendarCursor.getMonth() + offset, 1);
     const currentMonthStart = getMonthStart(new Date());
 
-    // Do not navigate to months before current month
     if (next < currentMonthStart) return;
     bookingCalendarCursor = next;
     initBookingCalendar();
