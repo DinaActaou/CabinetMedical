@@ -265,38 +265,7 @@ function setupEventListeners() {
         }
     });
 
-    const notifTrigger = document.getElementById('notification-trigger');
-    const notifPanel = document.getElementById('notifications-panel');
-    const markReadBtn = document.getElementById('mark-all-read');
-    if (notifTrigger && notifPanel) {
-        notifTrigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            notifPanel.classList.toggle('active');
-            if (notifPanel.classList.contains('active')) {
-                refreshNotificationsFromServer();
-            }
-        });
-        document.addEventListener('click', (e) => {
-            if (!notifPanel.contains(e.target) && !notifTrigger.contains(e.target)) {
-                notifPanel.classList.remove('active');
-            }
-        });
-    }
-    if (markReadBtn) {
-        markReadBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            markAllNotificationsRead();
-        });
-    }
-    document.getElementById('notifications-list')?.addEventListener('click', (e) => {
-        const btn = e.target.closest('.notif-mark-read');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const id = btn.getAttribute('data-notif-id');
-        if (id) markSingleNotificationRead(id);
-    });
+    // Notifications UI removed.
 }
 
 function escapeHtml(text) {
@@ -318,120 +287,8 @@ function formatNotificationTime(iso) {
     }
 }
 
-function updateNotificationBadge(count) {
-    const badge = document.getElementById('notification-badge');
-    if (!badge) return;
-    const n = Number(count) || 0;
-    if (n > 0) {
-        badge.textContent = String(n);
-        badge.classList.remove('notification-badge--hidden');
-    } else {
-        badge.textContent = '';
-        badge.classList.add('notification-badge--hidden');
-    }
-}
-
-function renderNotificationsList(items) {
-    const list = document.getElementById('notifications-list');
-    if (!list) return;
-    if (!items || items.length === 0) {
-        list.innerHTML = `<div class="notifications-empty">${escapeHtml(t('No notifications yet.'))}</div>`;
-        return;
-    }
-    list.innerHTML = items.map((n) => {
-        const d = n.data || {};
-        const title = escapeHtml(d.title || '');
-        const message = escapeHtml(d.message || '');
-        const read = Boolean(n.read_at);
-        const rowClass = read ? 'is-read' : 'is-unread';
-        const btn = read ? '' : `<button type="button" class="notif-mark-read" data-notif-id="${escapeHtml(n.id)}">${escapeHtml(t('Mark as read'))}</button>`;
-        const time = escapeHtml(formatNotificationTime(n.created_at));
-        return `<div class="notification-item ${rowClass}" data-notification-id="${escapeHtml(n.id)}">
-            <div class="notif-icon appointment"><i data-lucide="calendar"></i></div>
-            <div class="notif-content">
-                <p class="notif-content__title"><strong>${title}</strong></p>
-                <p class="notif-content__message">${message}</p>
-                <span class="notif-content__time">${time}</span>
-            </div>${btn}
-        </div>`;
-    }).join('');
-}
-
-async function refreshNotificationsFromServer() {
-    const list = document.getElementById('notifications-list');
-    if (!list) return;
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-    try {
-        const response = await fetch('/web-api/notifications', {
-            headers: {
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrf,
-            },
-            credentials: 'same-origin',
-        });
-        if (!response.ok) return;
-        const payload = await response.json();
-        updateNotificationBadge(payload.unread_count);
-        renderNotificationsList(payload.notifications || []);
-        lucide.createIcons();
-    } catch (err) {
-        console.error('Failed to load notifications:', err);
-    }
-}
-
-async function markSingleNotificationRead(id) {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-    try {
-        const response = await fetch(`/web-api/notifications/${encodeURIComponent(id)}/read`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrf,
-            },
-            credentials: 'same-origin',
-        });
-        if (!response.ok) throw new Error(String(response.status));
-        await refreshNotificationsFromServer();
-    } catch (err) {
-        console.error('Failed to mark notification read:', err);
-    }
-}
-
-async function markAllNotificationsRead() {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-    try {
-        const response = await fetch('/web-api/notifications/read-all', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrf,
-            },
-            credentials: 'same-origin',
-        });
-        if (!response.ok) throw new Error(String(response.status));
-        await refreshNotificationsFromServer();
-    } catch (err) {
-        console.error('Failed to mark notifications as read:', err);
-    }
-}
-
-function startNotificationPolling() {
-    stopNotificationPolling();
-    if (!currentUser) return;
-    notificationPollTimer = setInterval(() => refreshNotificationsFromServer(), 50000);
-}
-
-function stopNotificationPolling() {
-    if (notificationPollTimer) {
-        clearInterval(notificationPollTimer);
-        notificationPollTimer = null;
-    }
-}
+function startNotificationPolling() {}
+function stopNotificationPolling() {}
 
 function switchScreen(target) {
     if (!currentUser) return;
@@ -1097,7 +954,7 @@ async function executePatientCancelAppointment(id) {
         loadPatientHome();
         const searchInput = document.getElementById('search-appointments');
         await loadAppointments(searchInput ? searchInput.value : '');
-        refreshNotificationsFromServer();
+        // Notifications UI removed.
     } catch (err) {
         console.error(err);
         showToast(firstApiErrorMessage(err));
@@ -1351,7 +1208,7 @@ async function handleConfirmBooking() {
             feedback.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
         loadPatientHome();
-        refreshNotificationsFromServer();
+        // Notifications UI removed.
     } catch (err) {
         console.error(err);
         const msg = firstApiErrorMessage(err);
